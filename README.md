@@ -1,138 +1,177 @@
 # Voxable
 
-Local voice dictation with AI cleanup. A Wispr Flow alternative that runs entirely on your machine.
+**Local voice dictation with AI cleanup — a Wispr Flow alternative that runs entirely on your machine.**
 
-## How it works
-1. **Record** - Global hotkey (`Win+Alt+Space`) or Flow Bar tap captures microphone audio
-2. **Transcribe** - Local Whisper model (whisper.cpp via whisper-rs) converts speech to text
-3. **Clean up** - Optional LLM pass (any OpenAI-compatible API) removes filler words, fixes punctuation and grammar, applies your dictionary corrections
-4. **Expand** - Snippet triggers are replaced with full text (e.g. "brb" → "be right back")
-5. **Paste** - Polished text is auto-pasted to clipboard (or shown in Flow Bar if auto-paste is off)
+Press a hotkey, speak, and polished text is typed straight into whatever field you're in. Transcription is local (Whisper via whisper.cpp); an optional LLM pass cleans up filler words, punctuation, and grammar. No subscription, no cloud required.
 
-**Features:** Two-window UI (Flow Bar + Hub), VAD silence trimming, language auto-detect, custom cleanup prompts, dictionary word corrections, snippet expansion, 4-level cleanup pipeline (raw → whisper → LLM → final), history with audio playback (14-day retention), Win32 foreground app context, hands-free mode, sound feedback, auto-paste, LLM provider presets (OpenAI, Ollama, DeepSeek, LM Studio, Groq), draggable Flow Bar with position persistence.
-
-## UI
-
-### Flow Bar (always-on-top, bottom-center)
-- Status dot: idle (gray), recording (red pulse), processing (yellow), done (green), error (red)
-- Timer: shows recording duration
-- Result text: last dictation result
-- Copy button: copies result to clipboard
-- Right-click: context menu (Paste Last, History, Settings, Hide for 1 hour, Show, Quit)
-- Drag to reposition (position persists)
-
-### Hub (control panel, opened via tray or right-click)
-- **Dictation tab**: Last result with copy/paste buttons
-- **Settings tab**: Whisper model, LLM config, hotkey, language, auto-paste, custom prompt, hands-free mode
-- **Dictionary tab**: Add/remove custom word corrections
-- **Snippets tab**: Add/remove trigger→expansion pairs
-- **History tab**: Past dictations with timestamps, 4-level text, audio playback
-
-## Building
-
-### Prerequisites
-
-- [Rust](https://rustup.rs) (stable)
-- [Node.js](https://nodejs.org) 18+
-- C/C++ toolchain:
-  - **Windows**: VS 2022 Build Tools (C++), CMake, LLVM/Clang (libclang)
-  - **macOS**: Xcode Command Line Tools (`xcode-select --install`)
-  - **Linux**: GCC/Clang, CMake, libclang
-- For GPU acceleration: CUDA Toolkit (NVIDIA) or Metal (Apple Silicon, built-in)
-
-### Build
-
-```bash
-# Install frontend deps
-npm install
-
-# Dev mode (hot reload)
-npm run tauri dev
-
-# Release build (CPU-only)
-npm run tauri build
-
-# Release build with GPU acceleration
-npm run tauri build -- --features cuda    # NVIDIA (Windows/Linux)
-npm run tauri build -- --features metal   # Apple Silicon (macOS)
+```
+ ┌──────────────────────────────────────┐
+ │  ●  Ready                          ⧉  │   ← Flow Bar: small, always-on-top,
+ └──────────────────────────────────────┘      never steals focus
 ```
 
-### Windows CUDA build
+---
 
-Requires these environment variables:
-- `CUDA_PATH` — CUDA toolkit install path
-- `CUDA_PATH_V13_3` — version-specific path (MSBuild CUDA integration)
-- `LIBCLANG_PATH` — path to libclang
-- `CUDAARCHS=native` — compile for local GPU (e.g. sm_120 for RTX 5090)
+## How it works
 
-### First run
+1. **Record** — global hotkey (`Win`/`Cmd`+`Alt`+`Space`) or a click on the Flow Bar captures the mic.
+2. **Transcribe** — a local Whisper model turns speech into text.
+3. **Expand** — snippet triggers are replaced (e.g. `brb` → `be right back`).
+4. **Clean up** — an optional LLM pass (any OpenAI-compatible API) fixes fillers/punctuation/grammar and applies your dictionary corrections.
+5. **Paste** — the result is copied to the clipboard and (on Windows) auto-typed into the focused field.
 
-1. Launch Voxable — Flow Bar appears at bottom-center of screen
-2. Open Settings (right-click Flow Bar → Settings, or tray icon → Settings)
-3. Configure LLM (base URL + API key + model)
-4. Press `Win+Alt+Space` to start dictation
-5. First run downloads the Whisper model (~142 MB for "base")
+## Features
+
+- **Two-window UI** — a minimal **Flow Bar** for the daily loop + a tabbed **Hub** (Dictation, Settings, Dictionary, Snippets, History).
+- **Focus-preserving auto-paste** — the Flow Bar never takes focus, so text lands in your active app (Windows).
+- **4-level cleanup** — none / light / medium / high, or your own custom prompt.
+- **Dictionary** — word corrections injected into the LLM prompt.
+- **Snippets** — whole-word, case-insensitive trigger → expansion.
+- **History with audio** — every dictation stored with its recording (14-day retention, playback in the Hub).
+- **Local & private** — audio and transcripts never leave your machine (unless you point cleanup at a remote LLM).
+- **GPU optional** — CPU works everywhere; CUDA (NVIDIA) / Metal (Apple Silicon) for faster transcription.
+- **LLM presets** — OpenAI, DeepSeek, Groq, Ollama, LM Studio, or any OpenAI-compatible endpoint.
+
+---
+
+## Install
+
+There are no signed release binaries — build from source (it's a normal Tauri app). Pick your platform below. Full details and troubleshooting live in [BUILD.md](BUILD.md).
+
+### Common prerequisites (all platforms)
+
+- [Rust](https://rustup.rs) (stable, MSVC toolchain on Windows)
+- [Node.js](https://nodejs.org) 18+
+- **CMake** and **LLVM/Clang** (whisper.cpp needs CMake; `whisper-rs` bindgen needs `libclang`)
+
+### 🪟 Windows
+
+```powershell
+# Prereqs: VS 2022 Build Tools (C++ workload), CMake, LLVM, Node, Rust (MSVC)
+$env:LIBCLANG_PATH = "C:\Program Files\LLVM\bin"
+npm install
+npm run tauri build            # CPU build (portable)
+```
+
+Installer output: `src-tauri\target\release\bundle\` (`.msi` + NSIS `-setup.exe`). Installs to `%LOCALAPPDATA%\Voxable\`.
+
+**NVIDIA GPU (CUDA):** the CPU build already works; for GPU acceleration see the CUDA sections in [BUILD.md](BUILD.md). Two variants are scripted:
+- `scripts\build-installers.ps1` — CPU + a CUDA build tuned for *this* machine (`CUDAARCHS=native`).
+- `scripts\build-cuda-shareable.ps1` — a **self-contained, multi-GPU** CUDA installer (bundles the CUDA runtime DLLs; runs on any Windows machine with an NVIDIA driver — no toolkit/PATH needed). ~400 MB.
+
+> CUDA 13 keeps its runtime DLLs in `…\CUDA\vX.Y\bin\x64\` (not on PATH), so a plain CUDA build fails at launch with `cublas64_13.dll not found`. The shareable script bundles them; see BUILD.md.
+
+### 🍎 macOS
+
+```bash
+# Prereqs
+xcode-select --install
+brew install rustup-init cmake llvm node
+rustup-init -y            # then restart your shell
+
+# Build
+git clone https://github.com/kamicrafted/voxable.git && cd voxable
+export LIBCLANG_PATH=$(brew --prefix llvm)/lib
+npm install
+npm run tauri build -- --features metal   # Apple-Silicon GPU; omit --features for CPU
+```
+
+Output: `src-tauri/target/release/bundle/` (`.dmg` + `.app`). Unsigned, so the first launch needs right-click → **Open** (or `xattr -dr com.apple.quarantine <app>`).
+
+> **Note:** auto-paste into the focused field is currently Windows-only (Win32 `SendInput`). On macOS you get transcribe + clipboard copy; auto-type is a planned follow-up (via the `enigo` crate).
+
+### 🐧 Linux
+
+```bash
+# Prereqs: gcc/clang, cmake, libclang, node, rust, plus the usual Tauri/webkit2gtk deps
+npm install
+npm run tauri build          # CPU; add --features cuda for NVIDIA
+```
+
+---
+
+## First run
+
+1. Launch Voxable — the Flow Bar appears at the bottom-center of your screen.
+2. Open the Hub (tray icon → **Open Voxable**, or right-click the Flow Bar → **Settings**).
+3. (Optional) Set your LLM endpoint + API key + model for cleanup. With no key, you get raw Whisper text.
+4. Press the hotkey (`Win`/`Cmd`+`Alt`+`Space`), speak, and the text lands in your active field.
+5. The first dictation downloads the Whisper model (~74 MB for `base`).
+
+## Usage
+
+**Flow Bar** (always-on-top, draggable, non-focus-stealing):
+- Click the mic (or press the hotkey) to start/stop.
+- Status shows a live timer + waveform while recording, then `Pasted ✓` / `Copied ✓`.
+- Right-click → context menu: *Paste last · History · Settings · Hide for 1 hour · Quit*.
+- Drag to reposition — the position persists.
+
+**Hub tabs:** Dictation (last result) · Settings · Dictionary · Snippets · History (with audio playback).
+
+---
 
 ## Configuration
 
-Settings are stored in `%APPDATA%/voxable/settings.json` (Windows), `~/Library/Application Support/voxable/settings.json` (macOS), `~/.config/voxable/settings.json` (Linux).
+Settings live in a single JSON file:
+
+| OS | Path |
+|----|------|
+| Windows | `%APPDATA%\voxable\settings.json` |
+| macOS | `~/Library/Application Support/voxable/settings.json` |
+| Linux | `~/.config/voxable/settings.json` |
+
+History (index + `.f32` audio) is under `…/voxable/history/`; models under `…/voxable/models/`.
+
+Key fields:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `whisper_model` | `base` | Model size: tiny, base, small, medium, large-v3 |
-| `llm_base_url` | `https://api.openai.com/v1` | OpenAI-compatible API base URL |
-| `llm_api_key` | *(empty)* | API key (empty = no LLM cleanup) |
-| `llm_model` | `gpt-4o-mini` | Model name for cleanup |
-| `hotkey` | `Win+Alt+Space` | Global push-to-talk hotkey |
-| `language` | `en` | Whisper language (or `auto` to auto-detect) |
-| `auto_paste` | `true` | Auto-copy to clipboard after cleanup |
-| `custom_prompt` | *(empty)* | Custom LLM cleanup prompt (empty = default) |
-| `hands_free` | `false` | Toggle recording on hotkey (vs push-to-talk) |
-| `dictionary` | `[]` | Custom word corrections: `[{misspelling, correction}]` |
-| `flowbar_position` | *(auto)* | Flow Bar position: `{x, y}` |
+| `whisper_model` | `base` | `tiny` · `base` · `small` · `medium` · `large-v3` |
+| `cleanup_level` | `medium` | `none` · `light` · `medium` · `high` |
+| `llm_base_url` | `https://api.openai.com/v1` | OpenAI-compatible endpoint |
+| `llm_api_key` | *(empty)* | empty = no LLM cleanup (raw text) |
+| `llm_model` | `gpt-4o-mini` | model used for cleanup |
+| `hotkey` | `Super+Alt+Space` | global dictation hotkey |
+| `language` | `en` | Whisper language, or `auto` |
+| `auto_paste` | `true` | auto-type result into the active field (Windows); always copies to clipboard |
+| `sound_enabled` | `true` | completion beep |
+| `custom_prompt` | *(empty)* | overrides the cleanup-level preset |
+| `dictionary` | `[]` | `[{ "word": "...", "replacement": "..." }]` |
+| `snippets` | `[]` | `[{ "trigger": "brb", "expansion": "be right back" }]` |
 
-## Snippets
-
-Stored in `snippets.json` in the app data directory. Format:
-```json
-[
-  { "trigger": "brb", "expansion": "be right back" },
-  { "trigger": "tyvm", "expansion": "thank you very much" }
-]
-```
-
-Triggers are matched case-insensitively as whole words. Expansion replaces the trigger in the final text.
-
-## Dictionary
-
-Custom word corrections injected into the LLM system prompt. Format (in settings.json):
-```json
-{
-  "dictionary": [
-    { "misspelling": "recieve", "correction": "receive" },
-    { "misspelling": "seperate", "correction": "separate" }
-  ]
-}
-```
+Dictionary and snippets are best edited in the Hub (they persist to `settings.json`).
 
 ## Whisper models
 
 | Name | Size | Notes |
 |------|------|-------|
-| `tiny` | 39MB | Fastest, lowest accuracy |
-| `base` | 74MB | Default. Good speed/accuracy balance |
-| `small` | 244MB | Decent balance |
-| `medium` | 769MB | Good accuracy |
-| `large-v3` | 1.5GB | Best accuracy, slowest (needs GPU) |
+| `tiny` | 39 MB | fastest, lowest accuracy |
+| `base` | 74 MB | **default** — good speed/accuracy balance |
+| `small` | 244 MB | better accuracy |
+| `medium` | 769 MB | good accuracy |
+| `large-v3` | 1.5 GB | best accuracy, slowest (GPU recommended) |
 
-Models are downloaded from HuggingFace (`ggerganov/whisper.cpp`) on first use.
+Downloaded from HuggingFace (`ggerganov/whisper.cpp`) on first use.
 
-## Notes
+---
 
-- **Max recording**: 2 minutes per session (auto-stops)
-- **Resampling**: Audio is resampled to 16kHz (Whisper's native rate) via linear interpolation
-- **LLM is optional**: If no API key is set, you get raw Whisper text (still usable, just less polished)
-- **GPU is optional**: CPU-only build works fine; GPU gives 5-10x faster transcription
-- **History retention**: 14 days, auto-cleaned on app start
-- **Win32 app context**: Windows-only; LLM prompt includes the focused app title for context
-- **Code signing**: Not signed (personal/internal use). Expect SmartScreen prompt on Windows, right-click→Open on macOS
+## Architecture
+
+Cargo **workspace**:
+
+- **`voxable-core/`** — pure, host-independent logic (config, snippets, prompt building, history, VAD). No Tauri/OS deps; fully unit-tested (`cargo test -p voxable-core`).
+- **`src-tauri/`** — the Tauri v2 app: audio capture (cpal), Whisper (whisper-rs), LLM cleanup (reqwest), the two-window shell, tray, global hotkey, and Win32 helpers (foreground-app context, non-activating Flow Bar, synthesized paste).
+
+Frontend is vanilla JS + Vite (multi-page: `index.html` = Hub, `flowbar.html` = Flow Bar). Rust is the single source of truth; both windows invoke the same commands, and the global hotkey is the sole dictation trigger.
+
+**Stack:** Tauri 2 · whisper-rs 0.16 · cpal 0.15 · reqwest · Vite 5.
+
+## Notes & limitations
+
+- **Max recording:** 2 minutes per session (auto-stops).
+- **LLM is optional** — no key = raw Whisper text (still useful).
+- **GPU is optional** — CPU is fine; GPU is ~5–10× faster for transcription. CUDA builds are not portable unless built with the shareable script; Metal builds run on macOS only.
+- **Auto-paste** is Windows-only for now.
+- **Not code-signed** — expect SmartScreen (Windows) / Gatekeeper (macOS) on first launch.
+
+Dev/build details: [BUILD.md](BUILD.md) · Project state: [PROJECT_STATE.md](PROJECT_STATE.md)
