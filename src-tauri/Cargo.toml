@@ -2,7 +2,8 @@
 name = "voxable"
 version = "0.1.0"
 description = "Voxable - local voice dictation with AI cleanup"
-authors = ["voxable"]
+authors = ["Dave Yoon"]
+license = "MIT"
 edition = "2021"
 
 [features]

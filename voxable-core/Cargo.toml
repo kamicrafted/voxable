@@ -2,6 +2,7 @@
 name = "voxable-core"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
 description = "Pure, host-independent logic for Voxable (no Tauri/whisper/cpal/OS deps)."
 
 [dependencies]
