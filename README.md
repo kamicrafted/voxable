@@ -4,11 +4,13 @@
 
 Press a hotkey, speak, and polished text is typed straight into whatever field you're in. Transcription is local (Whisper via whisper.cpp); an optional LLM pass cleans up filler words, punctuation, and grammar. No subscription, no cloud required.
 
-```
- ┌──────────────────────────────────────┐
- │  ●  Ready                          ⧉  │   ← Flow Bar: small, always-on-top,
- └──────────────────────────────────────┘      never steals focus
-```
+<p align="center">
+  <img src="docs/screenshots/flowbar-idle.png" width="440" alt="Voxable Flow Bar — idle" />
+  <br/><br/>
+  <img src="docs/screenshots/flowbar-recording.png" width="440" alt="Voxable Flow Bar — recording" />
+  <br/>
+  <em>The Flow Bar floats quietly on top and never steals focus — hit the hotkey, speak, and the text lands in your active app.</em>
+</p>
 
 ---
 
@@ -107,6 +109,10 @@ npm run tauri build          # CPU; add --features cuda for NVIDIA
 - Drag to reposition — the position persists.
 
 **Hub tabs:** Dictation (last result) · Settings · Dictionary · Snippets · History (with audio playback).
+
+<p align="center">
+  <img src="docs/screenshots/hub-settings.png" width="420" alt="Voxable Hub — Settings tab" />
+</p>
 
 ---
 
