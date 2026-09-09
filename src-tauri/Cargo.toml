@@ -1,6 +1,6 @@
 [package]
 name = "voxable"
-version = "0.1.0"
+version = "0.2.0"
 description = "Voxable - local voice dictation with AI cleanup"
 authors = ["Dave Yoon"]
 license = "MIT"
