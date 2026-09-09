@@ -1,0 +1,10 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "resources": {
+      "cuda-runtime/cublas64_13.dll": "cublas64_13.dll",
+      "cuda-runtime/cublasLt64_13.dll": "cublasLt64_13.dll",
+      "cuda-runtime/cudart64_13.dll": "cudart64_13.dll"
+    }
+  }
+}

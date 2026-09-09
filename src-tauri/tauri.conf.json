@@ -1,0 +1,59 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Voxable",
+  "version": "0.1.0",
+  "identifier": "com.voxable.app",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "flowbar",
+        "url": "flowbar.html",
+        "title": "Voxable",
+        "width": 340,
+        "height": 96,
+        "resizable": false,
+        "visible": true,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true
+      },
+      {
+        "label": "hub",
+        "url": "index.html",
+        "title": "Voxable",
+        "width": 480,
+        "height": 640,
+        "minWidth": 420,
+        "minHeight": 480,
+        "resizable": true,
+        "visible": false,
+        "decorations": true,
+        "skipTaskbar": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "Productivity",
+    "shortDescription": "Local voice dictation with AI cleanup",
+    "longDescription": "Voxable turns your speech into polished text using local Whisper transcription and a pluggable LLM cleanup pass. No subscription, no cloud required."
+  }
+}

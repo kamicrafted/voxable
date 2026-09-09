@@ -1,0 +1,14 @@
+# Workspace root. `voxable-core` is pure logic (compiles with only rustup — no C
+# toolchain), so omp can own it and run `cargo test -p voxable-core`. `src-tauri`
+# is the Tauri app (needs the full toolchain + OS) and is built on the Windows host.
+[workspace]
+members = ["src-tauri", "voxable-core"]
+resolver = "2"
+
+# Profiles must live in the workspace ROOT (member profiles are ignored). Moved here
+# from src-tauri/Cargo.toml so the release optimizations + panic=abort still apply.
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"

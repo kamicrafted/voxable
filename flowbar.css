@@ -1,0 +1,181 @@
+:root {
+  --fg: #1a1d24;
+  --muted: #8b93a1;
+  --accent: #4f66f5;
+  --accent-2: #7b5cff;
+  --rec: #ff4d5e;
+  --done: #22c493;
+  --pill-bg: rgba(255, 255, 255, 0.92);
+  --pill-border: rgba(20, 24, 40, 0.06);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  font-family: -apple-system, "Segoe UI", Inter, system-ui, sans-serif;
+  color: var(--fg);
+  user-select: none;
+  cursor: default;
+}
+
+/* The visible pill is inset from the window so its shadow isn't clipped. */
+#pill {
+  position: absolute;
+  inset: 18px 22px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px 0 10px;
+  border-radius: 999px;
+  background: var(--pill-bg);
+  border: 1px solid var(--pill-border);
+  box-shadow: 0 10px 30px rgba(16, 24, 40, 0.18), 0 2px 6px rgba(16, 24, 40, 0.08);
+  backdrop-filter: blur(20px) saturate(1.4);
+}
+
+/* Mic / stop button */
+#mic {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  box-shadow: 0 2px 8px rgba(79, 102, 245, 0.35);
+  transition: transform 0.12s ease, box-shadow 0.15s ease, background 0.2s ease;
+}
+#mic:hover {
+  transform: scale(1.05);
+}
+#mic:active {
+  transform: scale(0.95);
+}
+#mic svg {
+  width: 19px;
+  height: 19px;
+}
+#mic .ic-stop {
+  display: none;
+}
+#pill.recording #mic {
+  background: linear-gradient(135deg, #ff5e6c, #ff8a5b);
+  box-shadow: 0 0 0 0 rgba(255, 77, 94, 0.5);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+#pill.recording #mic .ic-mic {
+  display: none;
+}
+#pill.recording #mic .ic-stop {
+  display: block;
+}
+#pill.processing #mic {
+  background: linear-gradient(135deg, #9aa3b2, #b6bccb);
+  box-shadow: none;
+}
+#pill.done #mic {
+  background: linear-gradient(135deg, #22c493, #34d3a6);
+  box-shadow: 0 2px 8px rgba(34, 196, 147, 0.35);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 77, 94, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 9px rgba(255, 77, 94, 0);
+  }
+}
+
+/* Center: status text + waveform + preview */
+#center {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+}
+#status {
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#preview {
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Waveform: shown only while recording */
+#wave {
+  display: none;
+  align-items: center;
+  gap: 3px;
+  height: 18px;
+}
+#pill.recording #wave {
+  display: flex;
+}
+#wave span {
+  width: 3px;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--accent), var(--accent-2));
+  animation: eq 1s ease-in-out infinite;
+}
+#wave span:nth-child(1) { animation-delay: 0s; }
+#wave span:nth-child(2) { animation-delay: 0.15s; }
+#wave span:nth-child(3) { animation-delay: 0.3s; }
+#wave span:nth-child(4) { animation-delay: 0.45s; }
+#wave span:nth-child(5) { animation-delay: 0.6s; }
+
+@keyframes eq {
+  0%, 100% { height: 6px; opacity: 0.6; }
+  50% { height: 18px; opacity: 1; }
+}
+
+/* Copy button */
+#copy {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid var(--pill-border);
+  background: rgba(20, 24, 40, 0.03);
+  color: var(--muted);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+#copy svg {
+  width: 15px;
+  height: 15px;
+}
+#copy:hover {
+  background: rgba(79, 102, 245, 0.1);
+  color: var(--accent);
+}

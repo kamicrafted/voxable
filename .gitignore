@@ -1,0 +1,27 @@
+# Rust / Cargo build output
+/target/
+**/target/
+
+# Node
+node_modules/
+dist/
+
+# Tauri generated (regenerated on build)
+src-tauri/gen/
+
+# Bundled CUDA runtime DLLs — staged locally for the shareable CUDA build
+# (~500MB; copy from ...\CUDA\vX.Y\bin\x64\ per BUILD.md). Never commit.
+src-tauri/cuda-runtime/
+
+# Prebuilt installers / large binaries
+installers/
+*.msi
+*.exe
+
+# Whisper models (downloaded at runtime, not part of the repo)
+*.bin
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp

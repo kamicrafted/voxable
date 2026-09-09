@@ -1,0 +1,47 @@
+[package]
+name = "voxable"
+version = "0.1.0"
+description = "Voxable - local voice dictation with AI cleanup"
+authors = ["voxable"]
+edition = "2021"
+
+[features]
+# GPU acceleration backends for whisper.cpp. Enable at build time:
+#   Windows/Linux (NVIDIA):  tauri build --features cuda
+#   macOS (Apple Silicon):   tauri build --features metal
+# With no feature, Whisper runs on CPU.
+cuda = ["whisper-rs/cuda"]
+metal = ["whisper-rs/metal"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-clipboard-manager = "2"
+parking_lot = "0.12"
+whisper-rs = "0.16"
+cpal = "0.15"
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+dirs = "5"
+log = "0.4"
+env_logger = "0.11"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["clock"] }
+# Pure logic lives here (omp owns it; testable with rustup alone).
+voxable-core = { path = "../voxable-core" }
+
+# Win32: foreground-app detection, non-activating Flow Bar, synthesized paste.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+] }
+
+# NOTE: [profile.release] moved to the workspace root Cargo.toml (member profiles
+# are ignored in a workspace).

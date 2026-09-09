@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Voxable</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header id="titlebar">
+        <span class="logo">🎙️ Voxable</span>
+        <span id="model-badge" class="badge"></span>
+      </header>
+
+      <nav id="tabs">
+        <button class="tab active" data-tab="dictation">Dictation</button>
+        <button class="tab" data-tab="settings">Settings</button>
+        <button class="tab" data-tab="dictionary">Dictionary</button>
+        <button class="tab" data-tab="snippets">Snippets</button>
+        <button class="tab" data-tab="history">History</button>
+      </nav>
+
+      <main id="panels">
+        <!-- Dictation -->
+        <section class="panel active" data-panel="dictation">
+          <div id="status-area">
+            <div id="status-indicator" class="idle"></div>
+            <div id="status-text">Ready</div>
+          </div>
+          <button id="record-btn">
+            <span class="record-icon">●</span>
+            <span class="record-label">Click to dictate</span>
+          </button>
+          <div id="output-area" class="hidden">
+            <div class="output-label">Result</div>
+            <div id="output-text"></div>
+            <div class="output-actions">
+              <button id="copy-btn">Copy</button>
+            </div>
+          </div>
+          <div id="hotkey-hint">
+            <kbd>Win</kbd>+<kbd>Alt</kbd>+<kbd>Space</kbd> to toggle from anywhere
+          </div>
+        </section>
+
+        <!-- Settings -->
+        <section class="panel" data-panel="settings">
+          <div class="setting-group">
+            <label>Whisper model</label>
+            <select id="model-select">
+              <option value="tiny">tiny (~39MB, fastest)</option>
+              <option value="base" selected>base (~74MB, recommended)</option>
+              <option value="small">small (~244MB)</option>
+              <option value="medium">medium (~769MB)</option>
+              <option value="large-v3">large-v3 (~1.5GB, best/slowest on CPU)</option>
+            </select>
+            <div id="model-status" class="setting-hint">Not downloaded</div>
+          </div>
+
+          <div class="setting-group">
+            <label>Cleanup level</label>
+            <select id="cleanup-level">
+              <option value="none">None (raw transcript)</option>
+              <option value="light">Light (punctuation + caps)</option>
+              <option value="medium" selected>Medium (remove fillers)</option>
+              <option value="high">High (polish + grammar)</option>
+            </select>
+          </div>
+
+          <div class="setting-group">
+            <label>LLM provider</label>
+            <select id="llm-preset">
+              <option value="custom">Custom</option>
+              <option value="openai">OpenAI</option>
+              <option value="deepseek">DeepSeek</option>
+              <option value="ollama">Ollama (local)</option>
+              <option value="lmstudio">LM Studio (local)</option>
+              <option value="groq">Groq</option>
+            </select>
+          </div>
+          <div class="setting-group">
+            <label>LLM endpoint (OpenAI-compatible)</label>
+            <input type="text" id="llm-base-url" placeholder="https://api.openai.com/v1" />
+          </div>
+          <div class="setting-group">
+            <label>API key</label>
+            <input type="password" id="llm-api-key" placeholder="sk-…" />
+          </div>
+          <div class="setting-group">
+            <label>Model name</label>
+            <input type="text" id="llm-model" placeholder="gpt-4o-mini" />
+          </div>
+
+          <div class="setting-group">
+            <label>Whisper language</label>
+            <select id="language-select">
+              <option value="auto">Auto-detect</option>
+              <option value="en" selected>English</option>
+              <option value="es">Spanish</option>
+              <option value="fr">French</option>
+              <option value="de">German</option>
+              <option value="it">Italian</option>
+              <option value="pt">Portuguese</option>
+              <option value="nl">Dutch</option>
+              <option value="pl">Polish</option>
+              <option value="ru">Russian</option>
+              <option value="ja">Japanese</option>
+              <option value="zh">Chinese</option>
+              <option value="ko">Korean</option>
+              <option value="ar">Arabic</option>
+              <option value="hi">Hindi</option>
+            </select>
+          </div>
+
+          <div class="setting-group">
+            <label>Hotkey</label>
+            <input type="text" id="hotkey-input" placeholder="Super+Alt+Space" />
+            <div class="setting-hint">e.g. Super+Alt+Space, Ctrl+Shift+D</div>
+          </div>
+
+          <div class="setting-group row">
+            <div>
+              <label>Auto-paste into active field</label>
+              <div class="setting-hint">Types the result straight into wherever your cursor is (always copies to clipboard too)</div>
+            </div>
+            <input type="checkbox" id="auto-paste" checked />
+          </div>
+          <div class="setting-group row">
+            <label>Sound feedback</label>
+            <input type="checkbox" id="sound-enabled" checked />
+          </div>
+
+          <div class="setting-group">
+            <label>Custom cleanup prompt (optional — overrides level)</label>
+            <textarea id="custom-prompt" rows="3" placeholder="Leave empty to use the level preset above"></textarea>
+          </div>
+
+          <div class="setting-actions">
+            <button id="save-settings">Save settings</button>
+          </div>
+        </section>
+
+        <!-- Dictionary -->
+        <section class="panel" data-panel="dictionary">
+          <p class="panel-hint">Corrections injected into the cleanup prompt (spoken word → written form).</p>
+          <div class="crud-add">
+            <input type="text" id="dict-word" placeholder="spoken (e.g. voxable)" />
+            <input type="text" id="dict-replacement" placeholder="written (e.g. Voxable)" />
+            <button id="dict-add">Add</button>
+          </div>
+          <div id="dict-list" class="crud-list"></div>
+        </section>
+
+        <!-- Snippets -->
+        <section class="panel" data-panel="snippets">
+          <p class="panel-hint">Trigger phrases expanded before cleanup (whole-word, case-insensitive).</p>
+          <div class="crud-add">
+            <input type="text" id="snip-trigger" placeholder="trigger (e.g. brb)" />
+            <input type="text" id="snip-expansion" placeholder="expansion (e.g. be right back)" />
+            <button id="snip-add">Add</button>
+          </div>
+          <div id="snip-list" class="crud-list"></div>
+        </section>
+
+        <!-- History -->
+        <section class="panel" data-panel="history">
+          <div class="history-header">
+            <p class="panel-hint">Recent dictations (14-day retention, audio saved locally).</p>
+            <button id="clear-history" class="danger">Clear all</button>
+          </div>
+          <div id="history-list" class="history-list"></div>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>
