@@ -80,25 +80,49 @@ npm run tauri build -- --features cuda
 Prerequisites (one time):
 
 ```bash
-xcode-select --install                 # Xcode Command Line Tools (clang, etc.)
-brew install rustup-init cmake llvm node
-rustup-init -y                          # then restart the shell
+xcode-select --install     # or a full Xcode install — either provides clang + libclang
+brew install cmake node    # cmake builds whisper.cpp
+# Rust: rustup (https://rustup.rs), then restart the shell
 ```
+
+`brew install llvm` is not needed — Xcode already ships a `libclang.dylib`, and
+`scripts/build-mac.sh` points `LIBCLANG_PATH` at it.
 
 Clone and build:
 
 ```bash
 git clone <your-repo-url> voxable
 cd voxable
-export LIBCLANG_PATH=$(brew --prefix llvm)/lib   # whisper-rs bindgen needs libclang
-npm install
-npm run tauri build -- --features metal          # GPU (Apple Silicon); omit --features for CPU
+./scripts/build-mac.sh          # Metal (Apple Silicon); pass --cpu for a CPU build
 ```
 
-Output: `src-tauri/target/release/bundle/` (`.dmg` + `.app`). Metal-linked builds
-run only on macOS; the CPU build (`npm run tauri build`) is portable. Code signing
-/ notarization is not set up — for personal use, right-click → Open the first time,
-or `xattr -dr com.apple.quarantine <app>`.
+Output: `target/release/bundle/` — `macos/Voxable.app` and
+`dmg/Voxable_<version>_aarch64.dmg` (drag-to-Applications). Metal-linked builds run only on macOS; the CPU
+build is portable. Code signing / notarization is not set up — for personal use,
+right-click → Open the first time, or `xattr -dr com.apple.quarantine <app>`.
+
+### Three macOS build fixes (already in the repo)
+
+- **Deployment target.** ggml uses `std::filesystem`, which libc++ marks unavailable
+  before macOS 10.15, and the `cc` crate defaults Apple builds to 10.13 →
+  `'path' is unavailable: introduced in macOS 10.15`. `.cargo/config.toml` pins
+  `MACOSX_DEPLOYMENT_TARGET = "11.0"`. Setting it as a shell variable is not reliable:
+  it does not survive `npm run tauri build`, and CMake caches the old value in
+  `target/release/build/whisper-rs-sys-*/out/build/CMakeCache.txt` — delete that
+  directory if you ever see the 10.15 error again.
+- **compiler-rt.** whisper.cpp's Metal backend uses Objective-C `@available`, which
+  clang lowers to `__isPlatformVersionAtLeast` in compiler-rt. rustc does not link
+  compiler-rt, so the link fails with an undefined symbol. `src-tauri/build.rs` adds
+  `libclang_rt.osx.a` (found via `xcrun clang -print-runtime-dir`) on macOS only.
+- **DMG bundling.** Tauri's `bundle_dmg.sh` does not work on a Kandji-managed Mac. It
+  first runs an AppleScript that asks Finder to lay out the disk-image window (times out
+  as `AppleEvent timed out (-1712)` from a non-GUI shell; `CI=1` makes Tauri pass
+  `--skip-jenkins` to skip it), and then calls `hdiutil convert`, which fails with
+  `Resource temporarily unavailable` (errno 35 from `CUDIFFileAccess::updateHeader`) —
+  reproducible on a 10 MB throwaway image with no project involved. So
+  `scripts/build-mac.sh` builds `--bundles app` and makes the disk image itself with
+  `hdiutil create -srcfolder … -format UDZO`, which compresses fine and skips `convert`
+  entirely. Result is a standard drag-to-Applications DMG.
 
 ## Tests
 

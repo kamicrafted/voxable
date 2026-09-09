@@ -67,18 +67,22 @@ Installer output: `src-tauri\target\release\bundle\` (`.msi` + NSIS `-setup.exe`
 
 ```bash
 # Prereqs
-xcode-select --install
-brew install rustup-init cmake llvm node
-rustup-init -y            # then restart your shell
+xcode-select --install     # or a full Xcode install
+brew install cmake node    # `brew install llvm` is not needed — Xcode ships libclang
+# Rust: https://rustup.rs, then restart your shell
 
 # Build
 git clone https://github.com/kamicrafted/voxable.git && cd voxable
-export LIBCLANG_PATH=$(brew --prefix llvm)/lib
-npm install
-npm run tauri build -- --features metal   # Apple-Silicon GPU; omit --features for CPU
+./scripts/build-mac.sh     # Metal (Apple Silicon); pass --cpu for a CPU build
 ```
 
-Output: `src-tauri/target/release/bundle/` (`.dmg` + `.app`). Unsigned, so the first launch needs right-click → **Open** (or `xattr -dr com.apple.quarantine <app>`).
+Output: `target/release/bundle/` — `macos/Voxable.app` and `dmg/Voxable_<version>_aarch64.dmg`.
+Unsigned, so the first launch needs right-click → **Open** (or `xattr -dr com.apple.quarantine <app>`).
+
+The script exists because three things need handling on macOS that don't on Windows: the
+whisper.cpp deployment target, linking compiler-rt for the Metal backend, and Tauri's DMG
+step (which needs Finder automation and `hdiutil convert` — neither works on a managed Mac).
+[BUILD.md](BUILD.md#macos-metal--must-be-built-on-a-mac) has the details.
 
 > **Note:** auto-paste into the focused field is currently Windows-only (Win32 `SendInput`). On macOS you get transcribe + clipboard copy; auto-type is a planned follow-up (via the `enigo` crate).
 
