@@ -77,10 +77,28 @@ npm run tauri build -- --features cuda
 
 ## macOS (Metal) — must be built on a Mac
 
+Prerequisites (one time):
+
 ```bash
-export LIBCLANG_PATH=$(brew --prefix llvm)/lib
-npm run tauri build -- --features metal
+xcode-select --install                 # Xcode Command Line Tools (clang, etc.)
+brew install rustup-init cmake llvm node
+rustup-init -y                          # then restart the shell
 ```
+
+Clone and build:
+
+```bash
+git clone <your-repo-url> voxable
+cd voxable
+export LIBCLANG_PATH=$(brew --prefix llvm)/lib   # whisper-rs bindgen needs libclang
+npm install
+npm run tauri build -- --features metal          # GPU (Apple Silicon); omit --features for CPU
+```
+
+Output: `src-tauri/target/release/bundle/` (`.dmg` + `.app`). Metal-linked builds
+run only on macOS; the CPU build (`npm run tauri build`) is portable. Code signing
+/ notarization is not set up — for personal use, right-click → Open the first time,
+or `xattr -dr com.apple.quarantine <app>`.
 
 ## Tests
 
