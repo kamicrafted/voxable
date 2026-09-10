@@ -253,6 +253,9 @@ kbd {
 .setting-group {
   margin-bottom: 18px;
 }
+.setting-group.row > div:first-child {
+  min-width: 0; /* wrap the description rather than forcing the row wider */
+}
 .setting-group.row {
   display: flex;
   align-items: center;
@@ -297,6 +300,10 @@ textarea:focus {
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 input[type="checkbox"] {
+  /* A flex item shrinks by default. Without this the track compresses below 40px
+     next to a long description, and the knob — absolutely positioned and 18px wide
+     — no longer fits inside it, so it bulges past the edge and clips. */
+  flex: 0 0 auto;
   width: 40px;
   height: 24px;
   appearance: none;

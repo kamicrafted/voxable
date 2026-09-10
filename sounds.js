@@ -11,6 +11,12 @@
 
 let ctx = null;
 
+/// The shared AudioContext. Exported because history playback needs to build audio
+/// buffers on it — one context per window, not one per feature.
+export function audioContext() {
+  return audio();
+}
+
 function audio() {
   if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
   // Browsers suspend a context created before any user gesture; a dictation

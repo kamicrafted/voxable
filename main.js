@@ -7,7 +7,7 @@ import {
   hotkeyParts,
   renderHotkey,
 } from "./hotkeys.js";
-import { playBeep } from "./sounds.js";
+import { audioContext, playBeep } from "./sounds.js";
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -15,6 +15,15 @@ const $ = (sel) => document.querySelector(sel);
 function uiLog(level, message) {
   invoke("log_from_ui", { level, message }).catch(() => {});
 }
+
+// Nothing in a release webview surfaces an exception — no console, no devtools — so
+// a broken tab looks like a tab that does nothing. Send them to the app log.
+window.addEventListener("error", (e) => {
+  uiLog("error", `uncaught: ${e.message} at ${e.filename}:${e.lineno}:${e.colno}`);
+});
+window.addEventListener("unhandledrejection", (e) => {
+  uiLog("error", `unhandled rejection: ${e.reason}`);
+});
 
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
@@ -71,7 +80,7 @@ async function startRecording() {
     setStatus("recording", "Listening…");
   } catch (err) {
     setStatus("idle", `Error: ${err}`);
-    console.error(err);
+    uiLog("error", `${err}`);
   }
 }
 
@@ -101,13 +110,13 @@ async function stopRecording() {
       await invoke("copy_to_clipboard", { text: cleaned });
       copied = true;
     } catch (e) {
-      console.error("clipboard failed:", e);
+      uiLog("error", `clipboard failed: ${e}`);
     }
     setStatus("done", copied ? "Copied to clipboard" : "Done");
     if (currentSettings?.sound_enabled) playBeep();
   } catch (err) {
     setStatus("idle", `Error: ${err}`);
-    console.error(err);
+    uiLog("error", `${err}`);
   } finally {
     busy = false;
   }
@@ -123,7 +132,7 @@ $("#copy-btn").addEventListener("click", async () => {
     await invoke("copy_to_clipboard", { text: lastResult });
     setStatus("done", "Copied");
   } catch (err) {
-    console.error(err);
+    uiLog("error", `${err}`);
   }
 });
 
@@ -269,7 +278,7 @@ $("#save-settings").addEventListener("click", async () => {
     try {
       await invoke("set_hotkey", { hotkey: merged.hotkey });
     } catch (e) {
-      console.error("hotkey registration:", e);
+      uiLog("error", `hotkey registration: ${e}`);
     }
     currentSettings = merged;
     setStatus("done", "Settings saved");
@@ -437,7 +446,7 @@ async function refreshHome() {
     $("#stat-dictations").textContent = formatCount(stats.dictations);
     $("#stat-top-app").textContent = stats.top_app ? stats.top_app[0] : "—";
   } catch (e) {
-    console.error("get_stats failed:", e);
+    uiLog("error", `get_stats failed: ${e}`);
   }
 
   try {
@@ -473,7 +482,7 @@ async function refreshHome() {
       list.append(row);
     }
   } catch (e) {
-    console.error("recent history failed:", e);
+    uiLog("error", `recent history failed: ${e}`);
   }
 }
 
@@ -520,7 +529,7 @@ async function loadDictionary() {
       list.appendChild(row);
     }
   } catch (err) {
-    console.error(err);
+    uiLog("error", `${err}`);
   }
 }
 
@@ -568,7 +577,7 @@ async function loadSnippets() {
       list.appendChild(row);
     }
   } catch (err) {
-    console.error(err);
+    uiLog("error", `${err}`);
   }
 }
 
@@ -633,7 +642,7 @@ async function loadHistory() {
       const copyBtn = document.createElement("button");
       copyBtn.textContent = "Copy";
       copyBtn.addEventListener("click", () =>
-        invoke("copy_to_clipboard", { text: e.cleaned || e.raw }).catch(console.error)
+        invoke("copy_to_clipboard", { text: e.cleaned || e.raw }).catch((e) => uiLog("error", `copy failed: ${e}`))
       );
 
       actions.appendChild(playBtn);
@@ -644,7 +653,7 @@ async function loadHistory() {
       list.appendChild(card);
     }
   } catch (err) {
-    console.error(err);
+    uiLog("error", `${err}`);
   }
 }
 
@@ -655,7 +664,7 @@ async function playHistoryAudio(id, btn) {
       btn.textContent = "No audio";
       return;
     }
-    const ctx = ensureCtx();
+    const ctx = audioContext();
     const buf = ctx.createBuffer(1, samples.length, 16000);
     buf.copyToChannel(Float32Array.from(samples), 0);
     const src = ctx.createBufferSource();
@@ -665,7 +674,7 @@ async function playHistoryAudio(id, btn) {
     src.onended = () => (btn.textContent = "▶ Play");
     src.start();
   } catch (err) {
-    console.error(err);
+    uiLog("error", `${err}`);
     btn.textContent = "Error";
   }
 }
@@ -676,7 +685,7 @@ $("#clear-history").addEventListener("click", async () => {
     await invoke("clear_history");
     loadHistory();
   } catch (err) {
-    console.error(err);
+    uiLog("error", `${err}`);
   }
 });
 
@@ -687,7 +696,7 @@ $("#clear-history").addEventListener("click", async () => {
     currentSettings = await invoke("get_settings");
     populateSettings(currentSettings);
   } catch (e) {
-    console.error(e);
+    uiLog("error", `${e}`);
   }
   refreshModelStatus();
   refreshHome();
