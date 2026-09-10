@@ -4,10 +4,18 @@ import {
   DEFAULT_HOTKEY,
   IS_MAC,
   hotkeyFromEvent,
+  hotkeyParts,
   renderHotkey,
 } from "./hotkeys.js";
+import { playBeep } from "./sounds.js";
 
 const $ = (sel) => document.querySelector(sel);
+
+/// Report to the Rust log; release builds have no console to read.
+function uiLog(level, message) {
+  invoke("log_from_ui", { level, message }).catch(() => {});
+}
+
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
 // Keep the last-loaded settings so saves send the FULL object (never wiping
@@ -126,30 +134,6 @@ listen("dictation-complete", (e) => {
   setStatus("done", "Done");
 });
 
-// --- Sound ---
-
-let audioCtx = null;
-function ensureCtx() {
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  return audioCtx;
-}
-function playBeep() {
-  try {
-    const ctx = ensureCtx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.frequency.value = 880;
-    gain.gain.value = 0.1;
-    osc.start();
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
-    osc.stop(ctx.currentTime + 0.15);
-  } catch {
-    /* ignore */
-  }
-}
-
 // --- Settings ---
 
 function getPresetFromUrl(url) {
@@ -265,11 +249,12 @@ async function checkHotkeyAvailable(hotkey) {
   const status = $("#hotkey-status");
   try {
     const free = await invoke("hotkey_available", { hotkey });
+    const shown = hotkeyParts(hotkey).join(IS_MAC ? "" : "+");
     if (free) {
-      status.textContent = "Available. Save settings to apply.";
+      status.textContent = `${shown} is available. Save settings to apply.`;
       status.classList.remove("warn");
     } else {
-      status.textContent = "Another app is already using that combination.";
+      status.textContent = `${shown} is taken — another app or macOS is already using it.`;
       status.classList.add("warn");
     }
     return free;
@@ -290,6 +275,14 @@ function onHotkeyKeydown(event) {
   event.preventDefault();
   event.stopPropagation();
 
+  // A combination macOS claims first never reaches the webview at all, which is
+  // indistinguishable from a broken recorder. Log every key we do see.
+  uiLog(
+    "info",
+    `hotkey recorder saw code=${event.code} ctrl=${event.ctrlKey} alt=${event.altKey} ` +
+      `shift=${event.shiftKey} meta=${event.metaKey}`
+  );
+
   if (event.code === "Escape") {
     stopRecordingHotkey();
     setPendingHotkey(currentSettings?.hotkey || DEFAULT_HOTKEY);
@@ -308,17 +301,27 @@ function onHotkeyKeydown(event) {
   checkHotkeyAvailable(hotkey);
 }
 
-$("#hotkey-record")?.addEventListener("click", () => {
-  if (recording) {
-    stopRecordingHotkey();
-    return;
-  }
+function startRecordingHotkey() {
+  if (recording) return;
   recording = true;
   $("#hotkey-record").classList.add("recording");
   $("#hotkey-status").textContent = IS_MAC
     ? "Press the keys you want. Esc cancels. (fn is set with Reset to default.)"
     : "Press the keys you want. Esc cancels.";
   window.addEventListener("keydown", onHotkeyKeydown, true);
+}
+
+// Focusing the display arms it — it looks like a field, so pressing keys should
+// just work. Clicking focuses too, so this covers both.
+$("#hotkey-record")?.addEventListener("focus", startRecordingHotkey);
+$("#hotkey-record")?.addEventListener("click", () => {
+  if (!recording) startRecordingHotkey();
+});
+$("#hotkey-record")?.addEventListener("blur", () => {
+  if (recording) {
+    stopRecordingHotkey();
+    $("#hotkey-status").textContent = "Stopped listening.";
+  }
 });
 
 $("#hotkey-reset")?.addEventListener("click", () => {

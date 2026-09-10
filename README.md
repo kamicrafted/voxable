@@ -18,12 +18,12 @@ Press a hotkey, speak, and polished text is typed straight into whatever field y
 
 | Platform | Download | Notes |
 |---|---|---|
-| **macOS** (Apple Silicon) | [**Voxable_0.3.0_aarch64.dmg**](https://github.com/kamicrafted/voxable/releases/download/v0.3.0/Voxable_0.3.0_aarch64.dmg) | Metal-accelerated. macOS 11+. Apple Silicon only — no Intel build. |
+| **macOS** (Apple Silicon) | [**Voxable_0.4.0_aarch64.dmg**](https://github.com/kamicrafted/voxable/releases/download/v0.4.0/Voxable_0.4.0_aarch64.dmg) | Metal-accelerated. macOS 11+. Apple Silicon only — no Intel build. |
 | **Windows** (any x64) | [**Voxable_0.2.0_x64_cpu-setup.exe**](https://github.com/kamicrafted/voxable/releases/download/v0.2.0/Voxable_0.2.0_x64_cpu-setup.exe) · [`.msi`](https://github.com/kamicrafted/voxable/releases/download/v0.2.0/Voxable_0.2.0_x64_cpu_en-US.msi) | ~3 MB. Runs anywhere, no GPU needed. **Start here.** |
 | **Windows** (NVIDIA GPU) | [**Voxable_0.2.0_x64_cuda-setup.exe**](https://github.com/kamicrafted/voxable/releases/download/v0.2.0/Voxable_0.2.0_x64_cuda-setup.exe) | ~380 MB. Faster transcription and `large-v3`. Bundles the CUDA runtime — no toolkit needed, works on RTX 20xx–50xx. |
 
-The Windows installers are still at **v0.2.0**: everything in v0.3.0 is macOS-specific, and the
-Windows build has not been rebuilt on top of it yet. Every version lives on the
+The Windows installers are still at **v0.2.0**: the macOS releases since then are largely
+platform-specific, and the Windows build has not been rebuilt on top of them yet. Every version lives on the
 [releases page](https://github.com/kamicrafted/voxable/releases).
 
 **Neither build is notarized or signed with a paid certificate**, so the OS will object the first time:
@@ -48,7 +48,9 @@ the rest.
 
 ## Features
 
-- **Two-window UI** — a minimal **Flow Bar** for the daily loop + a tabbed **Hub** (Dictation, Settings, Dictionary, Snippets, History).
+- **Two-window UI** — a minimal **Flow Bar** for the daily loop + a tabbed **Hub** (Home, Dictation, Settings, Dictionary, Snippets, History).
+- **A Flow Bar that gets out of the way** — frosted glass that matches your light or dark appearance, shrinking to a mic dot after a moment idle and expanding when you dictate. The dot stays draggable, so it never has to reappear before you can move it (macOS).
+- **Audible start and stop** — two ascending notes when recording begins, one lower note when it ends, so you are never unsure whether it heard you.
 - **Focus-preserving auto-paste** — the Flow Bar never takes focus, so text lands in your active app (macOS and Windows).
 - **Tap or hold** — tap the hotkey for hands-free dictation, or hold it for push-to-talk that ends when you let go. No mode to set (macOS).
 - **`fn` as the hotkey on macOS** — the Globe key does nothing useful by default, and it needs no chord. Any combination works too; the recorder captures a real keypress and checks the OS will allow it.
@@ -143,7 +145,7 @@ npm run tauri build          # CPU; add --features cuda for NVIDIA
 
 ## Usage
 
-**Flow Bar** (always-on-top, draggable, non-focus-stealing):
+**Flow Bar** (always-on-top, draggable, non-focus-stealing, shrinks to a dot when idle):
 - Click the mic (or tap the hotkey) to start/stop. **Hold** the hotkey instead and dictation ends the moment you release it.
 - Status shows a live timer + waveform while recording, then `Pasted ✓` / `Copied ✓`.
 - Right-click → context menu: *Paste last · History · Settings · Hide for 1 hour · Quit*.
@@ -216,6 +218,7 @@ Frontend is vanilla JS + Vite (multi-page: `index.html` = Hub, `flowbar.html` = 
 ## Notes & limitations
 
 - **Max recording:** 2 minutes per session (auto-stops).
+- **Very short utterances are ignored.** Under 250ms of speech returns nothing rather than a guess — Whisper does not fail on a fragment that short, it invents words.
 - **LLM is optional** — no key = raw Whisper text (still useful).
 - **GPU is optional** — CPU is fine; GPU is ~5–10× faster for transcription. CUDA builds are not portable unless built with the shareable script; Metal builds run on macOS only.
 - **Auto-paste** works on macOS and Windows; Linux would need an equivalent.

@@ -29,8 +29,10 @@ use voxable_core::screen;
 
 // Flow Bar logical size (must match tauri.conf.json + flowbar.css).
 // The window is larger than the visible pill so its soft shadow isn't clipped.
-const FLOWBAR_W: f64 = 340.0;
-const FLOWBAR_H: f64 = 96.0;
+// The window *is* the pill: native vibrancy fills the whole window, so there is no
+// transparent padding around it any more (the shadow is the window's own).
+const FLOWBAR_W: f64 = 296.0;
+const FLOWBAR_H: f64 = 60.0;
 const FLOWBAR_MARGIN: f64 = 40.0; // gap from the bottom edge
 
 fn main() {
@@ -223,6 +225,8 @@ fn main() {
             permission_status,
             request_accessibility,
             request_microphone,
+            fit_flowbar,
+            log_from_ui,
             open_privacy_settings,
             complete_onboarding,
             hotkey_available,
@@ -651,6 +655,9 @@ fn save_settings(
 ) -> Result<(), String> {
     config::save_settings(&app, &settings)?;
     *state.settings.lock() = settings;
+    // The Flow Bar caches settings so it does not have to await a fetch before it
+    // can start recording; tell it to refresh.
+    let _ = app.emit_to("flowbar", "settings-changed", ());
     Ok(())
 }
 
@@ -749,6 +756,49 @@ fn request_microphone(recorder: State<'_, Recorder>) -> Result<(), String> {
         let _ = recorder.stop();
         Ok(())
     }
+}
+
+/// Write a line from a webview into the app log.
+///
+/// Release builds have no devtools, so a frontend error is otherwise invisible —
+/// which is exactly when you need to see it. Cheap, and it keeps the two halves of
+/// the app writing to one log.
+#[tauri::command]
+fn log_from_ui(level: String, message: String) {
+    match level.as_str() {
+        "error" => log::error!("[ui] {message}"),
+        "warn" => log::warn!("[ui] {message}"),
+        _ => log::info!("[ui] {message}"),
+    }
+}
+
+/// Keep the Flow Bar on screen after it resizes.
+///
+/// Expanding from the collapsed dot grows the window to the right, so a dot parked
+/// near a display edge would otherwise expand off-screen. Called by the Flow Bar
+/// right after it changes its own size.
+#[tauri::command]
+fn fit_flowbar(app: AppHandle, width: f64, height: f64) -> Result<(), String> {
+    let Some(window) = app.get_webview_window("flowbar") else {
+        return Ok(());
+    };
+    let (monitors, _) = logical_monitors(&window);
+    let Ok(pos) = window.outer_position() else {
+        return Ok(());
+    };
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let current = screen::Rect::new(
+        pos.x as f64 / scale,
+        pos.y as f64 / scale,
+        width,
+        height,
+    );
+    log::info!("fit_flowbar: window resized to {width}x{height}");
+    let (x, y) = screen::clamp_to_monitor(&current, &monitors);
+    if (x - current.x).abs() > 0.5 || (y - current.y).abs() > 0.5 {
+        let _ = window.set_position(tauri::LogicalPosition::new(x, y));
+    }
+    Ok(())
 }
 
 /// Open the OS privacy settings at a specific pane.
