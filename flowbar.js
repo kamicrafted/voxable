@@ -21,8 +21,12 @@ let elapsed = 0;
 // a drag handle and a click target, so nothing has to reappear before it can be
 // moved, and there is no invisible window sitting over the screen.
 
+// Both states share a radius of 30: half of 60, which is a capsule at 296x60 and a
+// circle at 60x60. That means the vibrancy mask never has to be rebuilt on resize —
+// re-applying it was leaving the shape half-masked from the previous size, which
+// showed up as a pill with square ends or a dot with a flat edge.
 const EXPANDED = { w: 296, h: 60, radius: 30 };
-const COLLAPSED = { w: 44, h: 44, radius: 22 };
+const COLLAPSED = { w: 60, h: 60, radius: 30 };
 const COLLAPSE_AFTER_MS = 1500;
 
 let collapsed = false;
@@ -59,16 +63,21 @@ function nextFrames(n = 3) {
   });
 }
 
+let appliedRadius = EXPANDED.radius; // matches tauri.conf.json at startup
+
 async function setPillSize({ w, h, radius }) {
   const win = getCurrentWindow();
   await win.setSize(new LogicalSize(w, h));
-  await nextFrames();
-  // The radius belongs to the native vibrancy layer, not to CSS, so it has to be
-  // re-applied after every resize or the shape is left over from the previous size.
-  try {
-    await win.setEffects({ effects: ["popover"], state: "active", radius });
-  } catch (e) {
-    uiLog("error", `could not update the window effect: ${e}`);
+  // Only touch the effect if the shape actually changes. With both states on the
+  // same radius this never runs, which is the point.
+  if (radius !== appliedRadius) {
+    await nextFrames();
+    try {
+      await win.setEffects({ effects: ["popover"], state: "active", radius });
+      appliedRadius = radius;
+    } catch (e) {
+      uiLog("error", `could not update the window effect: ${e}`);
+    }
   }
   // Growing adds width to the right, so a dot near a display edge would expand
   // off-screen. Rust clamps it back.
@@ -92,8 +101,11 @@ async function collapse() {
   try {
     collapsed = true;
     document.body.classList.add("collapsed");
+    // Drop any leftover state class: a "done" dot rendered green instead of glass.
+    setState("", "Ready");
+    previewEl.textContent = "";
+    copyBtn.hidden = true;
     await setPillSize(COLLAPSED);
-    uiLog("info", "collapsed to dot");
   } catch (e) {
     collapsed = false;
     document.body.classList.remove("collapsed");

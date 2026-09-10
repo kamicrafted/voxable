@@ -26,6 +26,10 @@ pub struct Recorder {
     samples: Arc<Mutex<Vec<f32>>>,
     recording: Arc<AtomicBool>,
     sample_count: Arc<AtomicUsize>,
+    /// Set by the audio thread while a `cpal::Stream` exists, cleared once it has
+    /// been dropped. Written only there, so it reports what actually happened
+    /// rather than what was requested.
+    stream_active: Arc<AtomicBool>,
 }
 
 impl Recorder {
@@ -34,12 +38,16 @@ impl Recorder {
         let samples = Arc::new(Mutex::new(Vec::new()));
         let recording = Arc::new(AtomicBool::new(false));
         let sample_count = Arc::new(AtomicUsize::new(0));
+        let stream_active = Arc::new(AtomicBool::new(false));
 
         {
             let samples = samples.clone();
             let recording = recording.clone();
             let sample_count = sample_count.clone();
-            std::thread::spawn(move || audio_thread(rx, samples, recording, sample_count));
+            let stream_active = stream_active.clone();
+            std::thread::spawn(move || {
+                audio_thread(rx, samples, recording, sample_count, stream_active)
+            });
         }
 
         Self {
@@ -47,12 +55,20 @@ impl Recorder {
             samples,
             recording,
             sample_count,
+            stream_active,
         }
     }
 
     pub fn start(&self) -> Result<(), String> {
         if self.recording.load(Ordering::SeqCst) {
             return Err("Already recording".into());
+        }
+        // Never build a stream while the previous one is still installed. Doing so
+        // let the pending teardown land on the new stream, which then delivered
+        // silence for the rest of the recording — audible as a dictation that
+        // captured the right duration but only transcribed its first moment.
+        if !self.wait_for_stream(false) {
+            log::warn!("previous audio stream did not shut down; starting anyway");
         }
         self.samples.lock().clear();
         self.sample_count.store(0, Ordering::SeqCst);
@@ -66,28 +82,27 @@ impl Recorder {
     pub fn stop(&self) -> Vec<f32> {
         self.recording.store(false, Ordering::SeqCst);
         let _ = self.tx.lock().send(AudioCmd::Stop);
-        // Wait for the audio thread to actually drop the stream so no more
-        // samples can arrive, then drain the buffer.
-        self.wait_idle();
+        // Wait for the audio thread to actually drop the stream so no more samples
+        // can arrive, then drain the buffer.
+        if !self.wait_for_stream(false) {
+            log::warn!("audio stream still active 500ms after Stop");
+        }
         std::mem::take(&mut *self.samples.lock())
     }
 
-    /// Block until the audio thread has finished tearing down the stream.
-    /// We use a short sleep loop because the thread only signals via the
-    /// channel; a dedicated "stopped" flag would be cleaner but the 2-second
-    /// stream timeout already bounds worst-case wait.
-    fn wait_idle(&self) {
-        // The stream is dropped synchronously in the audio thread when it
-        // receives Stop. Give it a few ms to process the command and drop
-        // the stream. In practice this is <1ms.
-        for _ in 0..50 {
-            if !self.recording.load(Ordering::SeqCst) {
-                // Recording flag is already false; the thread has processed
-                // the Stop command and dropped the stream.
-                break;
+    /// Block until the audio thread reports the stream in state `want`.
+    ///
+    /// Returns false on timeout. The flag is written only by the audio thread —
+    /// waiting on a flag this side sets itself is what made the previous version a
+    /// no-op that returned immediately every time.
+    fn wait_for_stream(&self, want: bool) -> bool {
+        for _ in 0..100 {
+            if self.stream_active.load(Ordering::SeqCst) == want {
+                return true;
             }
-            std::thread::sleep(Duration::from_millis(10));
+            std::thread::sleep(Duration::from_millis(5));
         }
+        false
     }
 
     pub fn is_recording(&self) -> bool {
@@ -106,28 +121,39 @@ fn audio_thread(
     samples: Arc<Mutex<Vec<f32>>>,
     recording: Arc<AtomicBool>,
     sample_count: Arc<AtomicUsize>,
+    stream_active: Arc<AtomicBool>,
 ) {
     let mut stream: Option<cpal::Stream> = None;
 
     while let Ok(cmd) = rx.recv() {
         match cmd {
-            AudioCmd::Start => match build_stream(&samples, &recording, &sample_count) {
-                Ok(s) => {
-                    if let Err(e) = s.play() {
-                        log::error!("Failed to start audio stream: {}", e);
+            AudioCmd::Start => {
+                // A stream left over from a previous recording must go first, or
+                // two streams share the device.
+                if stream.take().is_some() {
+                    log::warn!("dropping a leftover audio stream before starting");
+                }
+                match build_stream(&samples, &recording, &sample_count) {
+                    Ok(s) => {
+                        if let Err(e) = s.play() {
+                            log::error!("Failed to start audio stream: {}", e);
+                            recording.store(false, Ordering::SeqCst);
+                        } else {
+                            stream = Some(s);
+                            stream_active.store(true, Ordering::SeqCst);
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("Failed to build audio stream: {}", e);
                         recording.store(false, Ordering::SeqCst);
-                    } else {
-                        stream = Some(s);
                     }
                 }
-                Err(e) => {
-                    log::error!("Failed to build audio stream: {}", e);
-                    recording.store(false, Ordering::SeqCst);
-                }
-            },
+            }
             AudioCmd::Stop => {
-                // Dropping the stream stops capture.
+                // Dropping the stream stops capture. Drop before clearing the flag
+                // so nobody can start a new stream while this one is still closing.
                 stream = None;
+                stream_active.store(false, Ordering::SeqCst);
             }
         }
     }

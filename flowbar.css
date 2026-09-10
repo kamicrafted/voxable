@@ -86,6 +86,13 @@ body.collapsed #mic {
   color: var(--accent);
 }
 
+/* Outbids #pill.done #mic / #pill.processing #mic, which are more specific than a
+   single-class selector and otherwise paint the dot green or grey. */
+body.collapsed #pill #mic {
+  background: none;
+  box-shadow: none;
+}
+
 body.collapsed #mic:hover {
   transform: none;
   background: var(--pill-bg);

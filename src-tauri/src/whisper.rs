@@ -135,6 +135,17 @@ impl WhisperEngine {
         };
         let tail_secs = captured_secs - head_secs - speech_secs;
 
+        // Level per second of the captured audio. If the stream dies partway through,
+        // this reads as real levels followed by zeros, which no amount of reasoning
+        // about durations can show.
+        let rms_trace: Vec<String> = audio
+            .chunks(16_000)
+            .map(|sec| {
+                let sum: f32 = sec.iter().map(|s| s * s).sum();
+                format!("{:.3}", (sum / sec.len().max(1) as f32).sqrt())
+            })
+            .collect();
+
         // Greedy decoding is far faster than beam search on CPU and is plenty
         // accurate for clear dictation. (Beam search was ~5x slower here.)
         let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
@@ -180,6 +191,7 @@ impl WhisperEngine {
             decode_ms,
             rtf
         );
+        log::info!("transcribe: level per second [{}]", rms_trace.join(" "));
 
         let mut text = String::new();
         for segment in state.as_iter() {
