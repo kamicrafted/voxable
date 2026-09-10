@@ -84,6 +84,40 @@ pub fn microphone_status() -> &'static str {
     }
 }
 
+/// Ask for microphone access, and show the system prompt if it has not been asked yet.
+///
+/// The prompt has to come from AVFoundation rather than from opening the input stream.
+/// `authorizationStatusForMediaType:` answers from a cache held for the life of the
+/// process, and a grant that arrives through CoreAudio — which is what opening a cpal
+/// stream uses — never invalidates that cache. The app then reads `not-determined`
+/// until it restarts, even though the grant is recorded. Asking here refreshes the
+/// cache when the user answers, so the next status read is correct.
+///
+/// Returns immediately. The answer arrives on a background queue, and callers read it
+/// through `microphone_status`.
+pub fn request_microphone_access() {
+    use block2::RcBlock;
+    use objc2::msg_send;
+    use objc2::runtime::{AnyClass, Bool};
+    use objc2_foundation::NSString;
+
+    let Some(class) = AnyClass::get(c"AVCaptureDevice") else {
+        log::warn!("AVCaptureDevice unavailable; cannot ask for microphone access");
+        return;
+    };
+    let media_type = NSString::from_str("soun"); // AVMediaTypeAudio
+    let handler = RcBlock::new(|granted: Bool| {
+        log::info!("microphone prompt answered: granted={}", granted.as_bool());
+    });
+    unsafe {
+        let _: () = msg_send![
+            class,
+            requestAccessForMediaType: &*media_type,
+            completionHandler: &*handler,
+        ];
+    }
+}
+
 /// Name of the frontmost application, e.g. `Safari`.
 pub fn frontmost_app() -> Option<String> {
     use objc2_app_kit::NSWorkspace;

@@ -92,8 +92,14 @@ impl WhisperEngine {
         let path_str = path
             .to_str()
             .ok_or("Model path is not valid UTF-8")?;
+        let t_load = std::time::Instant::now();
         let ctx = WhisperContext::new_with_params(path_str, params)
             .map_err(|e| format!("Failed to load whisper model: {}", e))?;
+        log::info!(
+            "model '{}' loaded in {}ms (first dictation pays this once)",
+            model_name,
+            t_load.elapsed().as_millis()
+        );
 
         self.ctx = Some(ctx);
         self.model_name = Some(model_name.to_string());
@@ -110,10 +116,13 @@ impl WhisperEngine {
 
         // VAD: trim leading/trailing silence to speed up transcription
         // (implementation lives in voxable-core, unit-tested there).
+        let t_start = std::time::Instant::now();
         let trimmed = voxable_core::vad::trim_silence(audio, 0.01, 30);
         if trimmed.is_empty() {
             return Ok(String::new());
         }
+        let trim_ms = t_start.elapsed().as_millis();
+        let speech_secs = trimmed.len() as f32 / 16_000.0;
 
         // Greedy decoding is far faster than beam search on CPU and is plenty
         // accurate for clear dictation. (Beam search was ~5x slower here.)
@@ -130,11 +139,32 @@ impl WhisperEngine {
         params.set_suppress_blank(true);
         params.set_suppress_nst(true);
 
+        let t_state = std::time::Instant::now();
         let mut state = ctx.create_state().map_err(|e| e.to_string())?;
+        let state_ms = t_state.elapsed().as_millis();
+
+        let t_decode = std::time::Instant::now();
         let audio_clone = trimmed.to_vec();
         state
             .full(params, &audio_clone)
             .map_err(|e| format!("Transcription failed: {}", e))?;
+        let decode_ms = t_decode.elapsed().as_millis();
+
+        // Realtime factor: how many seconds of speech we decode per second of wall
+        // clock. Anything under about 5x will feel like waiting.
+        let rtf = if decode_ms > 0 {
+            speech_secs / (decode_ms as f32 / 1000.0)
+        } else {
+            0.0
+        };
+        log::info!(
+            "transcribe: speech={:.1}s trim={}ms new_state={}ms decode={}ms ({:.1}x realtime)",
+            speech_secs,
+            trim_ms,
+            state_ms,
+            decode_ms,
+            rtf
+        );
 
         let mut text = String::new();
         for segment in state.as_iter() {

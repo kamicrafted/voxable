@@ -17,12 +17,13 @@ use std::sync::Arc;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Emitter, Manager, PhysicalPosition, State,
+    AppHandle, Emitter, Manager, State,
 };
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use voxable_core::history::HistoryEntry;
 use whisper::AppState;
+use voxable_core::screen;
 
 // Flow Bar logical size (must match tauri.conf.json + flowbar.css).
 // The window is larger than the visible pill so its soft shadow isn't clipped.
@@ -318,11 +319,23 @@ fn center_on_active_monitor(app: &AppHandle, window: &tauri::WebviewWindow) {
     let (Some(monitor), Ok(size)) = (monitor, window.outer_size()) else {
         return;
     };
+    // Logical points, not physical pixels: a position computed in physical pixels
+    // lands at those numbers as points, which on a 2x display puts the window at
+    // twice the intended offset.
+    let scale = monitor.scale_factor();
     let (mp, ms) = (monitor.position(), monitor.size());
-    let x = mp.x + (ms.width as i32 - size.width as i32) / 2;
-    let y = mp.y + (ms.height as i32 - size.height as i32) / 2;
+    let win_w = size.width as f64 / scale;
+    let win_h = size.height as f64 / scale;
+    let mon = screen::Rect::new(
+        mp.x as f64 / scale,
+        mp.y as f64 / scale,
+        ms.width as f64 / scale,
+        ms.height as f64 / scale,
+    );
+    let x = mon.x + (mon.width - win_w) / 2.0;
+    let y = mon.y + (mon.height - win_h) / 2.0;
     log::info!("centering hub at ({x}, {y}) on monitor {:?}", monitor.name());
-    let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
+    let _ = window.set_position(tauri::LogicalPosition::new(x, y));
 }
 
 /// True if `until` is a valid RFC 3339 timestamp still in the future.
@@ -365,27 +378,69 @@ fn clear_flowbar_hide(app: &AppHandle) {
     }
 }
 
-/// Apply the saved Flow Bar position (physical pixels), or default to
-/// bottom-center of the primary monitor.
+/// Every connected display as a logical-point rect, plus the primary.
+///
+/// Each monitor is divided by its own scale factor: Tauri reports monitor geometry
+/// in physical pixels, and dividing per-monitor recovers the shared logical space
+/// that window positions actually live in, including on mixed-DPI setups.
+fn logical_monitors(
+    window: &tauri::WebviewWindow,
+) -> (Vec<screen::Rect>, Option<screen::Rect>) {
+    let to_logical = |m: &tauri::Monitor| {
+        let scale = m.scale_factor();
+        let (p, s) = (m.position(), m.size());
+        screen::Rect::new(
+            p.x as f64 / scale,
+            p.y as f64 / scale,
+            s.width as f64 / scale,
+            s.height as f64 / scale,
+        )
+    };
+    let monitors = window
+        .available_monitors()
+        .map(|list| list.iter().map(to_logical).collect())
+        .unwrap_or_default();
+    let primary = window
+        .primary_monitor()
+        .ok()
+        .flatten()
+        .map(|m| to_logical(&m));
+    (monitors, primary)
+}
+
+/// Apply the saved Flow Bar position, or bottom-center of the primary monitor.
+///
+/// Positions are logical points throughout. A saved position is only reused when it
+/// still lands on a connected display — unplugging or rearranging monitors otherwise
+/// strands the pill off-screen with no way to drag it back.
 fn apply_flowbar_position(
     window: &tauri::WebviewWindow,
     saved: Option<&FlowbarPosition>,
 ) {
-    if let Some(pos) = saved {
-        let _ = window.set_position(PhysicalPosition::new(pos.x, pos.y));
+    let (monitors, primary) = logical_monitors(window);
+    let Some(primary) = primary else {
+        log::warn!("no primary monitor reported; leaving the Flow Bar where it is");
         return;
+    };
+    let ((x, y), fell_back) = screen::resolve_position(
+        saved.map(|p| (p.x, p.y)),
+        &monitors,
+        &primary,
+        FLOWBAR_W,
+        FLOWBAR_H,
+        FLOWBAR_MARGIN,
+    );
+    if fell_back {
+        if let Some(p) = saved {
+            log::info!(
+                "saved Flow Bar position ({}, {}) is not on any connected display; \
+                 moving it to bottom-center at ({x}, {y})",
+                p.x,
+                p.y
+            );
+        }
     }
-    if let Ok(Some(monitor)) = window.primary_monitor() {
-        let scale = monitor.scale_factor();
-        let size = monitor.size(); // physical
-        let origin = monitor.position(); // physical
-        let bar_w = FLOWBAR_W * scale;
-        let bar_h = FLOWBAR_H * scale;
-        let margin = FLOWBAR_MARGIN * scale;
-        let x = origin.x as f64 + (size.width as f64 - bar_w) / 2.0;
-        let y = origin.y as f64 + size.height as f64 - bar_h - margin;
-        let _ = window.set_position(PhysicalPosition::new(x, y));
-    }
+    let _ = window.set_position(tauri::LogicalPosition::new(x, y));
 }
 
 /// Register (or re-register) the global dictation hotkey. The handler ensures the
@@ -461,6 +516,7 @@ fn stop_recording(
 /// Transcribe the most recently captured audio; store the raw text in state.
 #[tauri::command]
 async fn transcribe(state: State<'_, AppState>) -> Result<String, String> {
+    let t_total = std::time::Instant::now();
     let audio = { state.last_audio.lock().clone() };
     if audio.is_empty() {
         return Err("No audio captured".into());
@@ -489,6 +545,10 @@ async fn transcribe(state: State<'_, AppState>) -> Result<String, String> {
     .await
     .map_err(|e| format!("Transcription task failed: {}", e))??;
 
+    log::info!(
+        "transcribe command total: {}ms",
+        t_total.elapsed().as_millis()
+    );
     *state.last_raw_text.lock() = Some(result.clone());
     Ok(result)
 }
@@ -643,15 +703,25 @@ fn request_accessibility() -> bool {
     }
 }
 
-/// Trigger the microphone prompt by opening the input device briefly.
-///
-/// There is no "ask without recording" API that works for a non-sandboxed app, and
-/// opening the stream is what macOS watches for.
+/// Show the microphone permission prompt.
 #[tauri::command]
 fn request_microphone(recorder: State<'_, Recorder>) -> Result<(), String> {
-    recorder.start()?;
-    let _ = recorder.stop();
-    Ok(())
+    #[cfg(target_os = "macos")]
+    {
+        // Not by opening the input stream: a grant that arrives that way leaves
+        // AVFoundation's cached authorization status reading `not-determined` for the
+        // rest of the process, which strands the onboarding screen. See
+        // `macos::request_microphone_access`.
+        let _ = recorder;
+        macos::request_microphone_access();
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        recorder.start()?;
+        let _ = recorder.stop();
+        Ok(())
+    }
 }
 
 /// Open the OS privacy settings at a specific pane.

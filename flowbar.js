@@ -144,14 +144,23 @@ listen("dictation-complete", (e) => {
   showPreview(e.payload);
 });
 
-// --- Position persistence: debounce window moves, save physical position. ---
+// --- Position persistence: debounce window moves, save the logical position. ---
+//
+// onMoved reports physical pixels; the position is stored and restored as logical
+// points so it survives moving between displays with different scale factors.
+// Saving physical is what pushed the pill off-screen on a 2x display.
 const appWindow = getCurrentWindow();
 let moveTimer = null;
 appWindow.onMoved(({ payload }) => {
   if (moveTimer) clearTimeout(moveTimer);
-  moveTimer = setTimeout(() => {
-    invoke("set_flowbar_position", {
-      position: { x: payload.x, y: payload.y },
-    }).catch(console.error);
+  moveTimer = setTimeout(async () => {
+    try {
+      const factor = await appWindow.scaleFactor();
+      invoke("set_flowbar_position", {
+        position: { x: payload.x / factor, y: payload.y / factor },
+      }).catch(console.error);
+    } catch (err) {
+      console.error(err);
+    }
   }, 400);
 });

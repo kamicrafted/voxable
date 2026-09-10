@@ -17,7 +17,9 @@ metal = ["whisper-rs/metal"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon"] }
+# macos-private-api: required for the transparent Flow Bar window on macOS.
+# Pairs with app.macOSPrivateApi in tauri.conf.json; both are needed.
+tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-clipboard-manager = "2"
 parking_lot = "0.12"
@@ -42,6 +44,8 @@ core-foundation = "0.10"
 objc2 = "0.6"
 objc2-foundation = "0.3"
 objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSRunningApplication"] }
+# The AVFoundation microphone prompt takes a completion block.
+block2 = "0.6"
 
 # Win32: foreground-app detection, non-activating Flow Bar, synthesized paste.
 [target.'cfg(windows)'.dependencies]

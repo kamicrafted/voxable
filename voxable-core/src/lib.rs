@@ -15,5 +15,6 @@ pub mod config;
 pub mod snippets;
 pub mod stats;
 pub mod prompt;
+pub mod screen;
 pub mod history;
 pub mod vad;

@@ -32,11 +32,19 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
   -addext "keyUsage=critical,digitalSignature" \
   -addext "extendedKeyUsage=critical,codeSigning" 2>/dev/null
 
+# security import rejects what OpenSSL 3 writes by default, in two separate ways, and
+# both report the same "MAC verification failed" error:
+#   - It reads only the old PBE algorithms, not the AES-256/PBKDF2 defaults.
+#   - It derives a different MAC key than OpenSSL does for an empty password, so the
+#     bundle needs a real one. The password protects nothing here; it never leaves
+#     this script.
+P12_PASS=voxable-local
 openssl pkcs12 -export -inkey "$WORK/key.pem" -in "$WORK/cert.pem" \
-  -out "$WORK/identity.p12" -passout pass:
+  -out "$WORK/identity.p12" -passout "pass:$P12_PASS" \
+  -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1
 
 # -T /usr/bin/codesign lets codesign use the key without a prompt every single build.
-security import "$WORK/identity.p12" -k "$KEYCHAIN" -P "" -T /usr/bin/codesign
+security import "$WORK/identity.p12" -k "$KEYCHAIN" -P "$P12_PASS" -T /usr/bin/codesign
 
 # codesign refuses a certificate it cannot build a trust chain for, so trust it in the
 # user domain. This is the step that shows a password prompt.
