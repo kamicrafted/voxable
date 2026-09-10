@@ -123,6 +123,17 @@ impl WhisperEngine {
         }
         let trim_ms = t_start.elapsed().as_millis();
         let speech_secs = trimmed.len() as f32 / 16_000.0;
+        let captured_secs = audio.len() as f32 / 16_000.0;
+        // The gap between these two is the whole question when words go missing:
+        // captured is what the microphone actually delivered, speech is what is left
+        // after leading/trailing silence is trimmed. A large gap means either a long
+        // pause before or after speaking, or capture that stopped early — and
+        // `trimmed_head/tail` says which end it came off.
+        let head_secs = {
+            let first_loud = audio.iter().position(|s| s.abs() > 0.01).unwrap_or(0);
+            first_loud as f32 / 16_000.0
+        };
+        let tail_secs = captured_secs - head_secs - speech_secs;
 
         // Greedy decoding is far faster than beam search on CPU and is plenty
         // accurate for clear dictation. (Beam search was ~5x slower here.)
@@ -158,8 +169,12 @@ impl WhisperEngine {
             0.0
         };
         log::info!(
-            "transcribe: speech={:.1}s trim={}ms new_state={}ms decode={}ms ({:.1}x realtime)",
+            "transcribe: captured={:.1}s speech={:.1}s (trimmed {:.1}s head, {:.1}s tail) \
+             trim={}ms new_state={}ms decode={}ms ({:.1}x realtime)",
+            captured_secs,
             speech_secs,
+            head_secs,
+            tail_secs.max(0.0),
             trim_ms,
             state_ms,
             decode_ms,

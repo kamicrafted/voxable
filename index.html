@@ -84,6 +84,17 @@
         <!-- Settings -->
         <section class="panel" data-panel="settings">
           <div class="setting-group">
+            <label>Hotkey</label>
+            <div class="hotkey-field">
+              <button type="button" id="hotkey-record" class="hotkey-display">
+                <span id="hotkey-keys"></span>
+              </button>
+              <button type="button" id="hotkey-reset" class="link-btn">Reset to default</button>
+            </div>
+            <div class="setting-hint" id="hotkey-status">Click it, then press the keys you want.</div>
+          </div>
+
+          <div class="setting-group">
             <label>Whisper model</label>
             <select id="model-select">
               <option value="tiny">tiny (~39MB, fastest)</option>
@@ -148,17 +159,6 @@
               <option value="ar">Arabic</option>
               <option value="hi">Hindi</option>
             </select>
-          </div>
-
-          <div class="setting-group">
-            <label>Hotkey</label>
-            <div class="hotkey-field">
-              <button type="button" id="hotkey-record" class="hotkey-display">
-                <span id="hotkey-keys"></span>
-              </button>
-              <button type="button" id="hotkey-reset" class="link-btn">Reset to default</button>
-            </div>
-            <div class="setting-hint" id="hotkey-status">Click, then press the keys you want.</div>
           </div>
 
           <div class="setting-group row">

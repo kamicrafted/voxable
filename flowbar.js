@@ -45,17 +45,30 @@ async function refreshSettings() {
   }
 }
 
+/// Wait for the window server to actually apply a resize.
+///
+/// setSize resolves when the request is sent, not when the window has its new
+/// frame, and the vibrancy mask is built from whatever size the window has when
+/// setEffects runs. Applying the radius too early masks the expanded pill at the
+/// dot's radius — which is what turned the pill back into a rounded rectangle.
+function nextFrames(n = 3) {
+  return new Promise((resolve) => {
+    const step = (left) =>
+      left <= 0 ? resolve() : requestAnimationFrame(() => step(left - 1));
+    step(n);
+  });
+}
+
 async function setPillSize({ w, h, radius }) {
   const win = getCurrentWindow();
-  uiLog("info", `setPillSize -> ${w}x${h}`);
   await win.setSize(new LogicalSize(w, h));
+  await nextFrames();
   // The radius belongs to the native vibrancy layer, not to CSS, so it has to be
-  // re-applied at the new size or the dot renders as a rounded square.
+  // re-applied after every resize or the shape is left over from the previous size.
   try {
     await win.setEffects({ effects: ["popover"], state: "active", radius });
-    uiLog("info", `window effect radius set to ${radius}`);
   } catch (e) {
-    console.error("could not update the window effect:", e);
+    uiLog("error", `could not update the window effect: ${e}`);
   }
   // Growing adds width to the right, so a dot near a display edge would expand
   // off-screen. Rust clamps it back.
