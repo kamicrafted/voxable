@@ -29,7 +29,17 @@ const FLOWBAR_H: f64 = 96.0;
 const FLOWBAR_MARGIN: f64 = 40.0; // gap from the bottom edge
 
 fn main() {
-    env_logger::init();
+    init_logging();
+
+    // TEMP: bare Tauri app with the same linked dependencies, to separate a runtime
+    // problem from a linkage problem.
+    let context = tauri::generate_context!();
+    if std::env::var("VOX_MINIMAL").is_ok() {
+        tauri::Builder::default()
+            .run(context)
+            .expect("minimal run failed");
+        return;
+    }
 
     let default_settings = Settings::default();
     let app_state = AppState::new(default_settings.clone());
@@ -102,7 +112,9 @@ fn main() {
             let mut tray_builder = TrayIconBuilder::with_id("voxable-tray")
                 .menu(&menu)
                 .tooltip("Voxable")
-                .show_menu_on_left_click(false);
+                // macOS menu-bar convention: a left click opens the menu. On Windows the
+                // menu belongs on right-click, and left-click opens the Hub (below).
+                .show_menu_on_left_click(cfg!(target_os = "macos"));
             if let Some(icon) = app.default_window_icon().cloned() {
                 tray_builder = tray_builder.icon(icon);
             }
@@ -182,18 +194,104 @@ fn main() {
             toggle_window,
             set_hotkey,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(context)
+        .expect("error while building tauri application")
+        .run(|_app, _event| {
+            // macOS: both windows hide rather than close, so clicking the Dock icon has
+            // nothing to restore unless we do it here.
+            #[cfg(target_os = "macos")]
+            if matches!(_event, tauri::RunEvent::Reopen { .. }) {
+                show_hub(_app);
+            }
+        });
+}
+
+// --- Logging ---
+
+/// Log to stderr and to `~/Library/Logs/Voxable/voxable.log`.
+///
+/// A GUI app launched from Finder has nowhere to write stderr, so without a log file
+/// there is no way to see what happened on a user's machine.
+fn init_logging() {
+    let mut builder = env_logger::Builder::from_env(
+        env_logger::Env::default().default_filter_or("info"),
+    );
+
+    if let Some(path) = log_file_path() {
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if let Ok(file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+        {
+            builder.target(env_logger::Target::Pipe(Box::new(file)));
+        }
+    }
+    builder.init();
+    log::info!("--- Voxable {} starting ---", env!("CARGO_PKG_VERSION"));
+}
+
+fn log_file_path() -> Option<std::path::PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        Some(dirs::home_dir()?.join("Library/Logs/Voxable/voxable.log"))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Some(dirs::data_local_dir()?.join("Voxable").join("voxable.log"))
+    }
 }
 
 // --- Helpers ---
 
 /// Show + focus the Hub window.
 fn show_hub(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("hub") {
-        let _ = window.show();
-        let _ = window.set_focus();
+    match app.get_webview_window("hub") {
+        Some(window) => {
+            center_on_active_monitor(app, &window);
+            if let Err(e) = window.show() {
+                log::error!("hub show() failed: {e}");
+            }
+            if let Err(e) = window.set_focus() {
+                log::error!("hub set_focus() failed: {e}");
+            }
+            // macOS: an accessory/background app cannot raise a window without also
+            // activating the process.
+            #[cfg(target_os = "macos")]
+            if let Err(e) = app.show() {
+                log::error!("app show() failed: {e}");
+            }
+        }
+        None => log::error!("no window labeled 'hub' — check tauri.conf.json"),
     }
+}
+
+/// Center a hidden window on the monitor under the cursor.
+///
+/// With no `x`/`y` in tauri.conf.json the OS picks the spot, and on a multi-display Mac
+/// the Hub landed on a coordinate where nothing rendered. Placing it ourselves means
+/// "Open Voxable" always puts the window where the user is looking. Only applied while
+/// the window is hidden, so a window the user has dragged stays put.
+fn center_on_active_monitor(app: &AppHandle, window: &tauri::WebviewWindow) {
+    if window.is_visible().unwrap_or(false) {
+        return;
+    }
+    let monitor = app
+        .cursor_position()
+        .ok()
+        .and_then(|c| window.monitor_from_point(c.x, c.y).ok().flatten())
+        .or_else(|| window.primary_monitor().ok().flatten());
+
+    let (Some(monitor), Ok(size)) = (monitor, window.outer_size()) else {
+        return;
+    };
+    let (mp, ms) = (monitor.position(), monitor.size());
+    let x = mp.x + (ms.width as i32 - size.width as i32) / 2;
+    let y = mp.y + (ms.height as i32 - size.height as i32) / 2;
+    log::info!("centering hub at ({x}, {y}) on monitor {:?}", monitor.name());
+    let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
 }
 
 /// True if `until` is a valid RFC 3339 timestamp still in the future.
