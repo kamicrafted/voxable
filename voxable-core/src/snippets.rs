@@ -7,7 +7,50 @@
 
 use regex::Regex;
 
-use crate::config::Snippet;
+use crate::config::{DictEntry, Snippet};
+
+/// Replace each `from` with its `to`, whole-word and case-insensitive.
+///
+/// Shared by snippet expansion and dictionary corrections, which are the same
+/// operation on different inputs. Replacements are literal (`regex::NoExpand`) so a
+/// `$` in the output is not read as a backreference, and a pair that fails to
+/// compile is skipped rather than panicking.
+fn substitute(text: &str, pairs: impl Iterator<Item = (String, String)>) -> String {
+    let mut out = text.to_string();
+    for (from, to) in pairs {
+        if from.is_empty() || to.is_empty() {
+            continue;
+        }
+        let pattern = format!(r"(?i)\b{}\b", regex::escape(&from));
+        let re = match Regex::new(&pattern) {
+            Ok(re) => re,
+            Err(e) => {
+                eprintln!("voxable: skipping {from:?}: invalid regex: {e}");
+                continue;
+            }
+        };
+        out = re.replace_all(&out, regex::NoExpand(&to)).to_string();
+    }
+    out
+}
+
+/// Apply dictionary corrections to transcribed text.
+///
+/// The dictionary has two consumers and this is the one that needs no LLM: whatever
+/// Whisper actually typed is replaced with the written form. Priming the decoder
+/// (see `prompt::build_whisper_vocabulary`) gets the spelling close; this makes it
+/// exact.
+///
+/// Runs *before* snippet expansion, so a correction can repair a trigger phrase that
+/// was misheard and let its snippet match after all.
+pub fn apply_dictionary(text: &str, entries: &[DictEntry]) -> String {
+    substitute(
+        text,
+        entries
+            .iter()
+            .map(|e| (e.word.trim().to_string(), e.replacement.trim().to_string())),
+    )
+}
 
 /// Replace every snippet trigger in `text` with its expansion.
 ///
@@ -16,30 +59,77 @@ use crate::config::Snippet;
 /// an empty trigger or expansion is skipped. A trigger that does not compile as a
 /// regex is skipped with a warning (never panics).
 pub fn expand_snippets(text: &str, snippets: &[Snippet]) -> String {
-    let mut out = text.to_string();
-    for snippet in snippets {
-        if snippet.trigger.is_empty() || snippet.expansion.is_empty() {
-            continue;
-        }
-        let pattern = format!(r"(?i)\b{}\b", regex::escape(&snippet.trigger));
-        let re = match Regex::new(&pattern) {
-            Ok(re) => re,
-            Err(e) => {
-                eprintln!(
-                    "voxable: skipping snippet {:?}: invalid regex: {}",
-                    snippet.trigger, e
-                );
-                continue;
-            }
-        };
-        out = re.replace_all(&out, regex::NoExpand(&snippet.expansion)).to_string();
-    }
-    out
+    substitute(
+        text,
+        snippets
+            .iter()
+            .map(|s| (s.trigger.clone(), s.expansion.clone())),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_dictionary_entry_corrects_what_whisper_typed() {
+        let dict = vec![DictEntry {
+            word: "Kamirafted".into(),
+            replacement: "Kamicrafted".into(),
+        }];
+        assert_eq!(
+            apply_dictionary("I work at Kamirafted today", &dict),
+            "I work at Kamicrafted today"
+        );
+    }
+
+    #[test]
+    fn dictionary_correction_is_case_insensitive_and_whole_word() {
+        let dict = vec![DictEntry {
+            word: "voxable".into(),
+            replacement: "Voxable".into(),
+        }];
+        assert_eq!(apply_dictionary("VOXABLE is fine", &dict), "Voxable is fine");
+        // Not a whole word: left alone.
+        assert_eq!(apply_dictionary("voxables", &dict), "voxables");
+    }
+
+    #[test]
+    fn a_dictionary_entry_can_repair_a_snippet_trigger() {
+        // The reason corrections run first: Whisper mishears the trigger, so the
+        // snippet would never match on its own.
+        let dict = vec![DictEntry {
+            word: "Commie Gmail".into(),
+            replacement: "kami gmail".into(),
+        }];
+        let snips = vec![Snippet {
+            trigger: "kami gmail".into(),
+            expansion: "hello@kamicrafted.com".into(),
+        }];
+        let corrected = apply_dictionary("send it to Commie Gmail", &dict);
+        assert_eq!(
+            expand_snippets(&corrected, &snips),
+            "send it to hello@kamicrafted.com"
+        );
+    }
+
+    #[test]
+    fn a_blank_side_is_skipped() {
+        let dict = vec![
+            DictEntry { word: "".into(), replacement: "x".into() },
+            DictEntry { word: "y".into(), replacement: "  ".into() },
+        ];
+        assert_eq!(apply_dictionary("y and z", &dict), "y and z");
+    }
+
+    #[test]
+    fn a_dollar_sign_in_the_replacement_is_literal() {
+        let dict = vec![DictEntry {
+            word: "price".into(),
+            replacement: "$5".into(),
+        }];
+        assert_eq!(apply_dictionary("the price", &dict), "the $5");
+    }
 
     fn snip(trigger: &str, expansion: &str) -> Snippet {
         Snippet {

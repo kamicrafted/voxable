@@ -204,7 +204,7 @@
 
         <!-- Dictionary -->
         <section class="panel" data-panel="dictionary">
-          <p class="panel-hint">Names and terms Whisper gets wrong. The <strong>written form</strong> is taught to Whisper directly, so it spells the word correctly in the first place — no LLM needed. The <strong>misheard</strong> side is only used to correct leftovers, and needs an LLM key under Settings. Write what Whisper actually types, not how you pronounce it.</p>
+          <p class="panel-hint">Names and terms Whisper gets wrong. The <strong>written form</strong> is taught to Whisper directly so it spells the word correctly in the first place; the <strong>misheard</strong> side then replaces whatever it still gets wrong. Both work with no LLM. Write what Whisper actually types, not how you pronounce it — check History to see its exact output.</p>
           <div class="crud-add">
             <input type="text" id="dict-word" placeholder="misheard as (e.g. vox able)" />
             <input type="text" id="dict-replacement" placeholder="written form (e.g. Voxable)" />

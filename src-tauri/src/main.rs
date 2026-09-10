@@ -680,8 +680,14 @@ async fn cleanup(app: AppHandle, state: State<'_, AppState>) -> Result<String, S
     let audio = { state.last_audio.lock().clone() };
     let duration_ms = *state.last_duration_ms.lock() as u64;
 
-    // Snippet expansion happens pre-LLM.
-    let expanded = voxable_core::snippets::expand_snippets(&raw, &settings.snippets);
+    // Dictionary corrections first, then snippets, both pre-LLM. Order matters: a
+    // correction can repair a trigger phrase Whisper misheard, which then lets its
+    // snippet match — the other way round the snippet never fires.
+    let corrected = voxable_core::snippets::apply_dictionary(&raw, &settings.dictionary);
+    if corrected != raw {
+        log::info!("dictionary corrected the transcript");
+    }
+    let expanded = voxable_core::snippets::expand_snippets(&corrected, &settings.snippets);
 
     // Foreground app (Windows only) as LLM context.
     let foreground = app_context::get_foreground_app();
