@@ -25,3 +25,6 @@ installers/
 .DS_Store
 Thumbs.db
 *.swp
+
+# Debug/verification screenshots (never part of the repo)
+screenshots/

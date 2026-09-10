@@ -37,6 +37,17 @@
         "visible": false,
         "decorations": true,
         "skipTaskbar": false
+      },
+      {
+        "label": "onboarding",
+        "url": "onboarding.html",
+        "title": "Welcome to Voxable",
+        "width": 520,
+        "height": 640,
+        "resizable": false,
+        "visible": false,
+        "decorations": true,
+        "skipTaskbar": false
       }
     ],
     "security": {

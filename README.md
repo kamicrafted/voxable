@@ -84,7 +84,14 @@ whisper.cpp deployment target, linking compiler-rt for the Metal backend, and Ta
 step (which needs Finder automation and `hdiutil convert` — neither works on a managed Mac).
 [BUILD.md](BUILD.md#macos-metal--must-be-built-on-a-mac) has the details.
 
-> **Note:** auto-paste into the focused field is currently Windows-only (Win32 `SendInput`). On macOS you get transcribe + clipboard copy; auto-type is a planned follow-up (via the `enigo` crate).
+**On macOS, the default hotkey is the `fn` / 🌐 key** and auto-paste is on. Both need the
+Accessibility permission, which the first-launch screen walks you through — Voxable never
+asks for a permission on its own. Two things worth knowing:
+
+- macOS gives `fn` its own job by default (usually the emoji picker). Set **System Settings
+  → Keyboard → "Press 🌐 key to" → Do Nothing** so the key is yours.
+- Without Accessibility, Voxable still transcribes and copies to the clipboard; you just
+  press the Flow Bar button and paste yourself.
 
 ### 🐧 Linux
 

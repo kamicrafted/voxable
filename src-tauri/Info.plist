@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- macOS terminates an app that touches the microphone without this string. -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Voxable records your voice to transcribe it on this machine. Audio is never uploaded.</string>
+  <!-- Shown when Voxable asks to control other apps so it can paste your transcript. -->
+  <key>NSAppleEventsUsageDescription</key>
+  <string>Voxable pastes your transcript into the app you are typing in.</string>
+</dict>
+</plist>

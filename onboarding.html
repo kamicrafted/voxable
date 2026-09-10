@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Welcome to Voxable</title>
+    <link rel="stylesheet" href="/onboarding.css" />
+  </head>
+  <body>
+    <div id="onboarding">
+      <header class="ob-header">
+        <div class="ob-mark">🎙️</div>
+        <h1>Welcome to Voxable</h1>
+        <p class="ob-sub">
+          Two permissions and you're set. Voxable transcribes on your machine — audio
+          never leaves it.
+        </p>
+      </header>
+
+      <ol class="ob-steps">
+        <li class="ob-step" data-step="microphone">
+          <div class="ob-step-icon">🎤</div>
+          <div class="ob-step-body">
+            <div class="ob-step-title">
+              Microphone
+              <span class="ob-status" data-status="microphone">Checking…</span>
+            </div>
+            <p class="ob-step-why">So Voxable can hear you. Required.</p>
+            <div class="ob-step-actions">
+              <button class="ob-btn" data-action="request-microphone">Allow microphone</button>
+              <button class="ob-btn ob-btn--quiet" data-action="open-microphone">
+                Open System Settings
+              </button>
+            </div>
+          </div>
+        </li>
+
+        <li class="ob-step" data-step="accessibility">
+          <div class="ob-step-icon">⌨️</div>
+          <div class="ob-step-body">
+            <div class="ob-step-title">
+              Accessibility
+              <span class="ob-status" data-status="accessibility">Checking…</span>
+            </div>
+            <p class="ob-step-why">
+              Two things need this: the <kbd>fn</kbd> key starting dictation from any app,
+              and pasting the result into whatever you're typing in. Without it Voxable
+              still works — you press the button in the Flow Bar and paste yourself.
+            </p>
+            <div class="ob-step-actions">
+              <button class="ob-btn" data-action="request-accessibility">Allow accessibility</button>
+              <button class="ob-btn ob-btn--quiet" data-action="open-accessibility">
+                Open System Settings
+              </button>
+            </div>
+            <p class="ob-note">
+              After switching Voxable on in System Settings, come back here — this screen
+              notices on its own.
+            </p>
+          </div>
+        </li>
+      </ol>
+
+      <section class="ob-globe" id="globe-tip" hidden>
+        <div class="ob-globe-key">fn</div>
+        <div>
+          <div class="ob-globe-title">One more thing about the fn key</div>
+          <p>
+            macOS gives <kbd>fn</kbd> / <kbd>🌐</kbd> its own job by default — usually the
+            emoji picker. Set it to <strong>Do Nothing</strong> so it's yours alone:
+            System Settings → Keyboard → "Press 🌐 key to".
+          </p>
+          <button class="ob-btn ob-btn--quiet" data-action="open-keyboard">
+            Open Keyboard settings
+          </button>
+        </div>
+      </section>
+
+      <footer class="ob-footer">
+        <button class="ob-btn ob-btn--quiet" data-action="skip">Skip for now</button>
+        <button class="ob-btn ob-btn--primary" data-action="done">Start using Voxable</button>
+      </footer>
+    </div>
+    <script type="module" src="/onboarding.js"></script>
+  </body>
+</html>

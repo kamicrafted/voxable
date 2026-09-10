@@ -1,8 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permissions for the Voxable Flow Bar + Hub windows",
-  "windows": ["flowbar", "hub"],
+  "description": "Permissions for the Voxable Flow Bar, Hub, and first-launch windows",
+  "windows": [
+    "flowbar",
+    "hub",
+    "onboarding"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-show",

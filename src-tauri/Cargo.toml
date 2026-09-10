@@ -35,6 +35,14 @@ chrono = { version = "0.4", features = ["clock"] }
 # Pure logic lives here (omp owns it; testable with rustup alone).
 voxable-core = { path = "../voxable-core" }
 
+# macOS: Fn-key event tap, synthesized Cmd+V, permission checks, frontmost app.
+[target.'cfg(target_os = "macos")'.dependencies]
+core-graphics = "0.24"
+core-foundation = "0.10"
+objc2 = "0.6"
+objc2-foundation = "0.3"
+objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSRunningApplication"] }
+
 # Win32: foreground-app detection, non-activating Flow Bar, synthesized paste.
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = [

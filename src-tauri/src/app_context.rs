@@ -102,18 +102,37 @@ pub fn send_ctrl_v() -> Result<(), String> {
 }
 
 // ---------------------------------------------------------------------------
-// Non-Windows stubs
+// macOS
 // ---------------------------------------------------------------------------
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+pub fn get_foreground_app() -> Option<String> {
+    crate::macos::frontmost_app()
+}
+
+/// No-op on macOS: the Flow Bar is kept out of the way with a non-activating
+/// panel style at the Tauri level, not with a window-handle flag.
+#[cfg(target_os = "macos")]
+pub fn set_noactivate(_hwnd_ptr: isize) {}
+
+#[cfg(target_os = "macos")]
+pub fn send_ctrl_v() -> Result<(), String> {
+    crate::macos::send_paste()
+}
+
+// ---------------------------------------------------------------------------
+// Other platforms
+// ---------------------------------------------------------------------------
+
+#[cfg(not(any(windows, target_os = "macos")))]
 pub fn get_foreground_app() -> Option<String> {
     None
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 pub fn set_noactivate(_hwnd_ptr: isize) {}
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 pub fn send_ctrl_v() -> Result<(), String> {
-    Err("paste-to-active is only implemented on Windows".into())
+    Err("paste-to-active is not implemented on this platform".into())
 }

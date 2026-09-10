@@ -61,6 +61,14 @@ detail lives in `Docs/voxable/` (e.g. `wispr-flow-ui-research.md`, `design.md`) 
 - **`brew install llvm` is unnecessary** — Xcode's `libclang.dylib` satisfies bindgen. `LIBCLANG_PATH=$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib`.
 - **Only `cmake` had to be installed** on a Mac that already had Xcode, Node and rustup.
 
+## macOS hotkeys, permissions, windows
+- **The Fn / 🌐 key cannot be a registered global shortcut.** tauri-plugin-global-shortcut goes through `global-hotkey` → Carbon `RegisterEventHotKey`, which takes a virtual keycode plus Cmd/Opt/Ctrl/Shift. Fn is none of those and never emits a key event — it only appears as a modifier-flag change (`NX_SECONDARYFNMASK`, 0x800000). Watching it means a `CGEventTap` on `FlagsChanged`, which needs Accessibility. Use `ListenOnly` so the key still does whatever the system assigns it; the user turns that off in System Settings → Keyboard → "Press 🌐 key to" → Do Nothing.
+- **`AXIsProcessTrusted()` checks, `AXIsProcessTrustedWithOptions(kAXTrustedCheckOptionPrompt)` prompts.** macOS shows that dialog once per app, so never call the prompting variant on startup — spend it when the user has asked for the thing that needs it.
+- **`NSMicrophoneUsageDescription` is mandatory**, in `src-tauri/Info.plist` (Tauri merges it into the bundle). Touching the mic without it terminates the process, which looks like a crash, not a permission problem.
+- **A window with no `x`/`y` in tauri.conf.json is placed by the OS, and on a multi-display Mac that can be somewhere the user never looks.** The Hub was landing at (3799, -676). Place it yourself on show — `center_on_active_monitor` uses the monitor under the cursor.
+- **The tray menu needs `show_menu_on_left_click(true)` on macOS.** Menu-bar items open on left click; leaving it false is a menu that appears not to work.
+- **A GUI app launched from a shell is not the same runtime as one launched from Finder.** Launched from a sandboxed terminal, WKWebView's content process dies at startup and every window is blank (`web content process terminated`, no crash report). Test with `open path/to/App.app`, and read `~/Library/Logs/Voxable/voxable.log` rather than stderr.
+
 ## Container build environment
 - **The omp container has rustc/cargo but NO libc dev files** (`Scrt1.o`, `crti.o`, `libc.so`, `libm.so` missing; no `sudo`, uid 1000). `cargo check`/`cargo test` fail at the **link** stage of build scripts (proc-macro2, quote) — type-checking of the crate itself is never reached. Fix = rebuild the omp image with `build-essential`/`libc6-dev` (the handoff's "Dave runs once" prereq). Until then, Rust work in-container is **unverified** — hand off for compile+test on a machine with a C toolchain.
 - **whisper-rs needs a C/C++ toolchain AND libclang** (bindgen). Can't build in the non-root omp container → build on Windows (VS Build Tools + LLVM + CMake).
