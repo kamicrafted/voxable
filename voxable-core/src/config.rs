@@ -29,6 +29,8 @@ pub struct Settings {
     pub sound_enabled: bool,
     pub dictionary: Vec<DictEntry>,
     pub snippets: Vec<Snippet>,
+    /// False until the user has been through the first-launch permission screen.
+    pub onboarding_complete: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -56,7 +58,7 @@ impl Default for Settings {
             llm_base_url: "https://api.openai.com/v1".into(),
             llm_api_key: String::new(),
             llm_model: "gpt-4o-mini".into(),
-            hotkey: "Super+Alt+Space".into(),
+            hotkey: default_hotkey().into(),
             language: "en".into(),
             auto_paste: true,
             custom_prompt: String::new(),
@@ -69,7 +71,21 @@ impl Default for Settings {
             sound_enabled: true,
             dictionary: Vec::new(),
             snippets: Vec::new(),
+            onboarding_complete: false,
         }
+    }
+}
+
+/// The out-of-the-box hotkey.
+///
+/// On macOS this is the Fn / 🌐 key, which Voxable watches with an event tap rather
+/// than a registered shortcut — see `src-tauri/src/macos.rs`. Elsewhere it is a
+/// three-key combo, because a bare modifier is not something the OS will hand us.
+pub fn default_hotkey() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "Fn"
+    } else {
+        "Ctrl+Alt+Space"
     }
 }
 
@@ -122,7 +138,7 @@ mod tests {
         let json = serde_json::to_string(&s).unwrap();
         let back: Settings = serde_json::from_str(&json).unwrap();
         assert_eq!(back.whisper_model, "base");
-        assert_eq!(back.hotkey, "Super+Alt+Space");
+        assert_eq!(back.hotkey, default_hotkey());
         assert!(back.auto_paste);
     }
 

@@ -15,11 +15,12 @@ export default defineConfig({
     minify: !process.env.TAURI_ENV_DEBUG ? "esbuild" : false,
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
     outDir: "dist",
-    // Multi-page: the Hub (index.html) and the Flow Bar (flowbar.html).
+    // Multi-page: Hub, Flow Bar, and the first-launch permission screen.
     rollupOptions: {
       input: {
         main: entry("./index.html"),
         flowbar: entry("./flowbar.html"),
+        onboarding: entry("./onboarding.html"),
       },
     },
   },

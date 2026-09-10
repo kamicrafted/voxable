@@ -137,6 +137,13 @@ window.addEventListener("contextmenu", (e) => {
 // The Rust global shortcut is the sole hotkey owner; it emits this to us.
 listen("toggle-recording", toggle);
 
+// Push-to-talk: the hotkey was held rather than tapped, so releasing it ends
+// dictation. stopRecording() guards on its own state, so this is safely ignored if
+// we are not recording or are already transcribing.
+listen("stop-recording", () => {
+  if (isRecording) stopRecording();
+});
+
 // Any dictation completing (e.g. initiated from the Hub) updates the preview.
 listen("dictation-complete", (e) => {
   if (busy) return; // our own run already handled the UI
@@ -144,14 +151,23 @@ listen("dictation-complete", (e) => {
   showPreview(e.payload);
 });
 
-// --- Position persistence: debounce window moves, save physical position. ---
+// --- Position persistence: debounce window moves, save the logical position. ---
+//
+// onMoved reports physical pixels; the position is stored and restored as logical
+// points so it survives moving between displays with different scale factors.
+// Saving physical is what pushed the pill off-screen on a 2x display.
 const appWindow = getCurrentWindow();
 let moveTimer = null;
 appWindow.onMoved(({ payload }) => {
   if (moveTimer) clearTimeout(moveTimer);
-  moveTimer = setTimeout(() => {
-    invoke("set_flowbar_position", {
-      position: { x: payload.x, y: payload.y },
-    }).catch(console.error);
+  moveTimer = setTimeout(async () => {
+    try {
+      const factor = await appWindow.scaleFactor();
+      invoke("set_flowbar_position", {
+        position: { x: payload.x / factor, y: payload.y / factor },
+      }).catch(console.error);
+    } catch (err) {
+      console.error(err);
+    }
   }, 400);
 });

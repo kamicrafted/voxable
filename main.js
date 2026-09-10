@@ -1,5 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import {
+  DEFAULT_HOTKEY,
+  IS_MAC,
+  hotkeyFromEvent,
+  renderHotkey,
+} from "./hotkeys.js";
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
@@ -13,6 +19,7 @@ let currentSettings = null;
 function showTab(name) {
   $$(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === name));
   $$(".panel").forEach((p) => p.classList.toggle("active", p.dataset.panel === name));
+  if (name === "home") refreshHome();
   if (name === "history") loadHistory();
   if (name === "dictionary") loadDictionary();
   if (name === "snippets") loadSnippets();
@@ -183,7 +190,7 @@ function populateSettings(s) {
   $("#llm-base-url").value = s.llm_base_url || "";
   $("#llm-api-key").value = s.llm_api_key || "";
   $("#llm-model").value = s.llm_model || "";
-  $("#hotkey-input").value = s.hotkey || "Super+Alt+Space";
+  setPendingHotkey(s.hotkey || DEFAULT_HOTKEY);
   $("#language-select").value = s.language || "en";
   $("#auto-paste").checked = s.auto_paste !== false;
   $("#sound-enabled").checked = s.sound_enabled !== false;
@@ -200,7 +207,7 @@ $("#save-settings").addEventListener("click", async () => {
     llm_base_url: $("#llm-base-url").value.trim(),
     llm_api_key: $("#llm-api-key").value.trim(),
     llm_model: $("#llm-model").value.trim(),
-    hotkey: $("#hotkey-input").value.trim() || "Super+Alt+Space",
+    hotkey: pendingHotkey || DEFAULT_HOTKEY,
     language: $("#language-select").value,
     auto_paste: $("#auto-paste").checked,
     sound_enabled: $("#sound-enabled").checked,
@@ -222,6 +229,187 @@ $("#save-settings").addEventListener("click", async () => {
   }
 });
 
+
+// --- Hotkey recorder -------------------------------------------------------
+
+// What the Settings tab will save. Kept separate from currentSettings so an
+// unsaved capture can be abandoned by switching tabs.
+let pendingHotkey = DEFAULT_HOTKEY;
+let recording = false;
+
+function setPendingHotkey(hotkey) {
+  pendingHotkey = hotkey;
+  renderHotkey($("#hotkey-keys"), hotkey);
+  paintHotkeyHints(hotkey);
+}
+
+/** Show the current hotkey everywhere it appears outside Settings. */
+function paintHotkeyHints(hotkey) {
+  const hint = $("#hotkey-hint");
+  if (hint) {
+    hint.replaceChildren();
+    const keys = document.createElement("span");
+    renderHotkey(keys, hotkey);
+    hint.append(keys, " to toggle from anywhere");
+  }
+  const home = $("#home-hotkey");
+  if (home) {
+    home.replaceChildren();
+    const keys = document.createElement("span");
+    renderHotkey(keys, hotkey);
+    home.append("Press ", keys, " anywhere to dictate");
+  }
+}
+
+async function checkHotkeyAvailable(hotkey) {
+  const status = $("#hotkey-status");
+  try {
+    const free = await invoke("hotkey_available", { hotkey });
+    if (free) {
+      status.textContent = "Available. Save settings to apply.";
+      status.classList.remove("warn");
+    } else {
+      status.textContent = "Another app is already using that combination.";
+      status.classList.add("warn");
+    }
+    return free;
+  } catch (e) {
+    status.textContent = `Could not check that combination: ${e}`;
+    status.classList.add("warn");
+    return false;
+  }
+}
+
+function stopRecordingHotkey() {
+  recording = false;
+  $("#hotkey-record").classList.remove("recording");
+  window.removeEventListener("keydown", onHotkeyKeydown, true);
+}
+
+function onHotkeyKeydown(event) {
+  event.preventDefault();
+  event.stopPropagation();
+
+  if (event.code === "Escape") {
+    stopRecordingHotkey();
+    setPendingHotkey(currentSettings?.hotkey || DEFAULT_HOTKEY);
+    $("#hotkey-status").textContent = "Kept the previous hotkey.";
+    return;
+  }
+
+  const hotkey = hotkeyFromEvent(event);
+  if (!hotkey) {
+    // Still holding modifiers — wait for the key that completes the combo.
+    $("#hotkey-status").textContent = "Keep holding, then press a key…";
+    return;
+  }
+  stopRecordingHotkey();
+  setPendingHotkey(hotkey);
+  checkHotkeyAvailable(hotkey);
+}
+
+$("#hotkey-record")?.addEventListener("click", () => {
+  if (recording) {
+    stopRecordingHotkey();
+    return;
+  }
+  recording = true;
+  $("#hotkey-record").classList.add("recording");
+  $("#hotkey-status").textContent = IS_MAC
+    ? "Press the keys you want. Esc cancels. (fn is set with Reset to default.)"
+    : "Press the keys you want. Esc cancels.";
+  window.addEventListener("keydown", onHotkeyKeydown, true);
+});
+
+$("#hotkey-reset")?.addEventListener("click", () => {
+  stopRecordingHotkey();
+  setPendingHotkey(DEFAULT_HOTKEY);
+  $("#hotkey-status").textContent = IS_MAC
+    ? "Back to the fn key. Save settings to apply."
+    : "Back to the default. Save settings to apply.";
+  $("#hotkey-status").classList.remove("warn");
+});
+
+// --- Home screen -----------------------------------------------------------
+
+function formatDuration(minutes) {
+  if (minutes <= 0) return "0m";
+  if (minutes < 1) return "< 1m";
+  const hours = Math.floor(minutes / 60);
+  const mins = Math.round(minutes % 60);
+  return hours ? `${hours}h ${mins}m` : `${mins}m`;
+}
+
+function formatCount(n) {
+  return n.toLocaleString();
+}
+
+function relativeTime(iso) {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const seconds = Math.max(0, (Date.now() - then) / 1000);
+  if (seconds < 60) return "just now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+}
+
+async function refreshHome() {
+  try {
+    const stats = await invoke("get_stats");
+    $("#stat-words").textContent = formatCount(stats.words);
+    $("#stat-words-week").textContent = stats.words_this_week
+      ? `${formatCount(stats.words_this_week)} in the last 7 days`
+      : "Nothing yet this week";
+    $("#stat-saved").textContent = formatDuration(stats.minutes_saved);
+    $("#stat-wpm").textContent = stats.words_per_minute
+      ? Math.round(stats.words_per_minute)
+      : "—";
+    $("#stat-dictations").textContent = formatCount(stats.dictations);
+    $("#stat-top-app").textContent = stats.top_app ? stats.top_app[0] : "—";
+  } catch (e) {
+    console.error("get_stats failed:", e);
+  }
+
+  try {
+    const entries = await invoke("get_history");
+    const list = $("#recent-list");
+    list.replaceChildren();
+    if (!entries.length) {
+      const empty = document.createElement("p");
+      empty.className = "panel-hint";
+      empty.textContent = "Your dictations will show up here.";
+      list.append(empty);
+      return;
+    }
+    for (const entry of entries.slice(0, 5)) {
+      const row = document.createElement("div");
+      row.className = "recent-row";
+
+      const text = document.createElement("div");
+      text.className = "recent-text";
+      text.textContent = entry.cleaned;
+
+      const meta = document.createElement("div");
+      meta.className = "recent-meta";
+      meta.textContent = [relativeTime(entry.timestamp), entry.app]
+        .filter(Boolean)
+        .join(" · ");
+
+      row.append(text, meta);
+      row.addEventListener("click", async () => {
+        await invoke("copy_to_clipboard", { text: entry.cleaned });
+        meta.textContent = "Copied";
+      });
+      list.append(row);
+    }
+  } catch (e) {
+    console.error("recent history failed:", e);
+  }
+}
+
+$("#view-all-history")?.addEventListener("click", () => showTab("history"));
+
 async function refreshModelStatus() {
   try {
     const status = await invoke("model_status");
@@ -229,7 +417,7 @@ async function refreshModelStatus() {
       ? `Downloaded: ${status.model}`
       : "Not downloaded — will download on first use";
     $("#model-status").textContent = txt;
-    $("#model-badge").textContent = status.model;
+    $("#model-badge").textContent = `Whisper · ${status.model}`;
   } catch {
     /* ignore */
   }
@@ -433,4 +621,8 @@ $("#clear-history").addEventListener("click", async () => {
     console.error(e);
   }
   refreshModelStatus();
+  refreshHome();
 })();
+
+// A dictation finishing anywhere changes the numbers on the home screen.
+listen("dictation-complete", () => refreshHome());

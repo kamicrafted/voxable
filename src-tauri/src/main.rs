@@ -6,6 +6,8 @@ mod app_context;
 mod audio;
 mod config;
 mod llm;
+#[cfg(target_os = "macos")]
+mod macos;
 mod whisper;
 
 use audio::Recorder;
@@ -15,12 +17,15 @@ use std::sync::Arc;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Emitter, Manager, PhysicalPosition, State,
+    AppHandle, Emitter, Manager, State,
 };
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use voxable_core::history::HistoryEntry;
 use whisper::AppState;
+use std::sync::atomic::{AtomicBool, Ordering};
+use voxable_core::hotkey;
+use voxable_core::screen;
 
 // Flow Bar logical size (must match tauri.conf.json + flowbar.css).
 // The window is larger than the visible pill so its soft shadow isn't clipped.
@@ -29,7 +34,17 @@ const FLOWBAR_H: f64 = 96.0;
 const FLOWBAR_MARGIN: f64 = 40.0; // gap from the bottom edge
 
 fn main() {
-    env_logger::init();
+    init_logging();
+
+    // TEMP: bare Tauri app with the same linked dependencies, to separate a runtime
+    // problem from a linkage problem.
+    let context = tauri::generate_context!();
+    if std::env::var("VOX_MINIMAL").is_ok() {
+        tauri::Builder::default()
+            .run(context)
+            .expect("minimal run failed");
+        return;
+    }
 
     let default_settings = Settings::default();
     let app_state = AppState::new(default_settings.clone());
@@ -70,7 +85,20 @@ fn main() {
             let handle = app.handle().clone();
 
             // Load persisted settings into shared state.
-            let settings = load_settings(&handle);
+            let mut settings = load_settings(&handle);
+
+            // A config written before macOS support carries the Windows default
+            // hotkey, which reads as "Super" (nobody calls it that) and is not what
+            // the app now ships with. Move it to the platform default once, before
+            // the user has been through onboarding.
+            if cfg!(target_os = "macos")
+                && !settings.onboarding_complete
+                && settings.hotkey == "Super+Alt+Space"
+            {
+                settings.hotkey = voxable_core::config::default_hotkey().to_string();
+                let _ = config::save_settings(&handle, &settings);
+                log::info!("migrated the default hotkey to {}", settings.hotkey);
+            }
             {
                 let state = app.state::<AppState>();
                 *state.settings.lock() = settings.clone();
@@ -102,7 +130,9 @@ fn main() {
             let mut tray_builder = TrayIconBuilder::with_id("voxable-tray")
                 .menu(&menu)
                 .tooltip("Voxable")
-                .show_menu_on_left_click(false);
+                // macOS menu-bar convention: a left click opens the menu. On Windows the
+                // menu belongs on right-click, and left-click opens the Hub (below).
+                .show_menu_on_left_click(cfg!(target_os = "macos"));
             if let Some(icon) = app.default_window_icon().cloned() {
                 tray_builder = tray_builder.icon(icon);
             }
@@ -139,6 +169,15 @@ fn main() {
                     let _ = flowbar.hide();
                 } else {
                     let _ = flowbar.show();
+                }
+            }
+
+            // --- First launch: permission walkthrough ---
+            if !settings.onboarding_complete {
+                if let Some(window) = app.get_webview_window("onboarding") {
+                    center_on_active_monitor(&handle, &window);
+                    let _ = window.show();
+                    let _ = window.set_focus();
                 }
             }
 
@@ -181,19 +220,124 @@ fn main() {
             show_flowbar_menu,
             toggle_window,
             set_hotkey,
+            permission_status,
+            request_accessibility,
+            request_microphone,
+            open_privacy_settings,
+            complete_onboarding,
+            hotkey_available,
+            get_stats,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(context)
+        .expect("error while building tauri application")
+        .run(|_app, _event| {
+            // macOS: both windows hide rather than close, so clicking the Dock icon has
+            // nothing to restore unless we do it here.
+            #[cfg(target_os = "macos")]
+            if matches!(_event, tauri::RunEvent::Reopen { .. }) {
+                show_hub(_app);
+            }
+        });
+}
+
+// --- Logging ---
+
+/// Log to stderr and to `~/Library/Logs/Voxable/voxable.log`.
+///
+/// A GUI app launched from Finder has nowhere to write stderr, so without a log file
+/// there is no way to see what happened on a user's machine.
+fn init_logging() {
+    let mut builder = env_logger::Builder::from_env(
+        env_logger::Env::default().default_filter_or("info"),
+    );
+
+    if let Some(path) = log_file_path() {
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if let Ok(file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+        {
+            builder.target(env_logger::Target::Pipe(Box::new(file)));
+        }
+    }
+    builder.init();
+    log::info!("--- Voxable {} starting ---", env!("CARGO_PKG_VERSION"));
+}
+
+fn log_file_path() -> Option<std::path::PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        Some(dirs::home_dir()?.join("Library/Logs/Voxable/voxable.log"))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Some(dirs::data_local_dir()?.join("Voxable").join("voxable.log"))
+    }
 }
 
 // --- Helpers ---
 
 /// Show + focus the Hub window.
 fn show_hub(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("hub") {
-        let _ = window.show();
-        let _ = window.set_focus();
+    match app.get_webview_window("hub") {
+        Some(window) => {
+            center_on_active_monitor(app, &window);
+            if let Err(e) = window.show() {
+                log::error!("hub show() failed: {e}");
+            }
+            if let Err(e) = window.set_focus() {
+                log::error!("hub set_focus() failed: {e}");
+            }
+            // macOS: an accessory/background app cannot raise a window without also
+            // activating the process.
+            #[cfg(target_os = "macos")]
+            if let Err(e) = app.show() {
+                log::error!("app show() failed: {e}");
+            }
+        }
+        None => log::error!("no window labeled 'hub' — check tauri.conf.json"),
     }
+}
+
+/// Center a hidden window on the monitor under the cursor.
+///
+/// With no `x`/`y` in tauri.conf.json the OS picks the spot, and on a multi-display Mac
+/// the Hub landed on a coordinate where nothing rendered. Placing it ourselves means
+/// "Open Voxable" always puts the window where the user is looking. Only applied while
+/// the window is hidden, so a window the user has dragged stays put.
+fn center_on_active_monitor(app: &AppHandle, window: &tauri::WebviewWindow) {
+    if window.is_visible().unwrap_or(false) {
+        return;
+    }
+    let monitor = app
+        .cursor_position()
+        .ok()
+        .and_then(|c| window.monitor_from_point(c.x, c.y).ok().flatten())
+        .or_else(|| window.primary_monitor().ok().flatten());
+
+    let (Some(monitor), Ok(size)) = (monitor, window.outer_size()) else {
+        return;
+    };
+    // Logical points, not physical pixels: a position computed in physical pixels
+    // lands at those numbers as points, which on a 2x display puts the window at
+    // twice the intended offset.
+    let scale = monitor.scale_factor();
+    let (mp, ms) = (monitor.position(), monitor.size());
+    let win_w = size.width as f64 / scale;
+    let win_h = size.height as f64 / scale;
+    let mon = screen::Rect::new(
+        mp.x as f64 / scale,
+        mp.y as f64 / scale,
+        ms.width as f64 / scale,
+        ms.height as f64 / scale,
+    );
+    let x = mon.x + (mon.width - win_w) / 2.0;
+    let y = mon.y + (mon.height - win_h) / 2.0;
+    log::info!("centering hub at ({x}, {y}) on monitor {:?}", monitor.name());
+    let _ = window.set_position(tauri::LogicalPosition::new(x, y));
 }
 
 /// True if `until` is a valid RFC 3339 timestamp still in the future.
@@ -236,51 +380,132 @@ fn clear_flowbar_hide(app: &AppHandle) {
     }
 }
 
-/// Apply the saved Flow Bar position (physical pixels), or default to
-/// bottom-center of the primary monitor.
+/// Every connected display as a logical-point rect, plus the primary.
+///
+/// Each monitor is divided by its own scale factor: Tauri reports monitor geometry
+/// in physical pixels, and dividing per-monitor recovers the shared logical space
+/// that window positions actually live in, including on mixed-DPI setups.
+fn logical_monitors(
+    window: &tauri::WebviewWindow,
+) -> (Vec<screen::Rect>, Option<screen::Rect>) {
+    let to_logical = |m: &tauri::Monitor| {
+        let scale = m.scale_factor();
+        let (p, s) = (m.position(), m.size());
+        screen::Rect::new(
+            p.x as f64 / scale,
+            p.y as f64 / scale,
+            s.width as f64 / scale,
+            s.height as f64 / scale,
+        )
+    };
+    let monitors = window
+        .available_monitors()
+        .map(|list| list.iter().map(to_logical).collect())
+        .unwrap_or_default();
+    let primary = window
+        .primary_monitor()
+        .ok()
+        .flatten()
+        .map(|m| to_logical(&m));
+    (monitors, primary)
+}
+
+/// Apply the saved Flow Bar position, or bottom-center of the primary monitor.
+///
+/// Positions are logical points throughout. A saved position is only reused when it
+/// still lands on a connected display — unplugging or rearranging monitors otherwise
+/// strands the pill off-screen with no way to drag it back.
 fn apply_flowbar_position(
     window: &tauri::WebviewWindow,
     saved: Option<&FlowbarPosition>,
 ) {
-    if let Some(pos) = saved {
-        let _ = window.set_position(PhysicalPosition::new(pos.x, pos.y));
+    let (monitors, primary) = logical_monitors(window);
+    let Some(primary) = primary else {
+        log::warn!("no primary monitor reported; leaving the Flow Bar where it is");
         return;
+    };
+    let ((x, y), fell_back) = screen::resolve_position(
+        saved.map(|p| (p.x, p.y)),
+        &monitors,
+        &primary,
+        FLOWBAR_W,
+        FLOWBAR_H,
+        FLOWBAR_MARGIN,
+    );
+    if fell_back {
+        if let Some(p) = saved {
+            log::info!(
+                "saved Flow Bar position ({}, {}) is not on any connected display; \
+                 moving it to bottom-center at ({x}, {y})",
+                p.x,
+                p.y
+            );
+        }
     }
-    if let Ok(Some(monitor)) = window.primary_monitor() {
-        let scale = monitor.scale_factor();
-        let size = monitor.size(); // physical
-        let origin = monitor.position(); // physical
-        let bar_w = FLOWBAR_W * scale;
-        let bar_h = FLOWBAR_H * scale;
-        let margin = FLOWBAR_MARGIN * scale;
-        let x = origin.x as f64 + (size.width as f64 - bar_w) / 2.0;
-        let y = origin.y as f64 + size.height as f64 - bar_h - margin;
-        let _ = window.set_position(PhysicalPosition::new(x, y));
-    }
+    let _ = window.set_position(tauri::LogicalPosition::new(x, y));
 }
 
 /// Register (or re-register) the global dictation hotkey. The handler ensures the
 /// Flow Bar is visible and emits `toggle-recording` to it (sole dictation owner).
 fn register_hotkey(app: &AppHandle, hotkey: &str) -> Result<(), String> {
-    let shortcut =
-        Shortcut::from_str(hotkey).map_err(|e| format!("Invalid hotkey '{}': {}", hotkey, e))?;
     let gs = app.global_shortcut();
     let _ = gs.unregister_all();
+
+    // The Fn / 🌐 key is not a shortcut the OS will register — it never produces a
+    // key event, only a modifier-flag change — so it runs through an event tap.
+    #[cfg(target_os = "macos")]
+    if hotkey.eq_ignore_ascii_case("fn") {
+        // One key, both modes. The press toggles as it always has; the release ends
+        // dictation only when the key was held long enough to mean push-to-talk.
+        // `press_started` records which of the two things the press did, because a
+        // press that *stopped* dictation must not be undone by its own release.
+        let press_handle = app.clone();
+        let release_handle = app.clone();
+        let press_started = Arc::new(AtomicBool::new(false));
+        let press_started_r = Arc::clone(&press_started);
+        return macos::start_fn_listener(
+            move || {
+                let was_recording = press_handle
+                    .try_state::<Recorder>()
+                    .map(|r| r.is_recording())
+                    .unwrap_or(false);
+                press_started.store(!was_recording, Ordering::SeqCst);
+                trigger_dictation(&press_handle);
+            },
+            move |held_ms| {
+                let started = press_started_r.load(Ordering::SeqCst);
+                if hotkey::release_action(started, held_ms) == hotkey::ReleaseAction::Stop {
+                    log::info!("Fn held {held_ms}ms — push-to-talk, stopping on release");
+                    // The Flow Bar decides for real: its own guard ignores this when
+                    // it is not recording or is already transcribing.
+                    let _ = release_handle.emit_to("flowbar", "stop-recording", ());
+                }
+            },
+        );
+    }
+
+    let shortcut =
+        Shortcut::from_str(hotkey).map_err(|e| format!("Invalid hotkey '{}': {}", hotkey, e))?;
     let handle = app.clone();
     gs.on_shortcut(shortcut, move |_app, _sc, event| {
         if event.state != ShortcutState::Pressed {
             return;
         }
-        if let Some(w) = handle.get_webview_window("flowbar") {
-            // Show but DO NOT focus — the Flow Bar is non-activating so the
-            // user's text field keeps focus (that's what lets us paste into it).
-            if !w.is_visible().unwrap_or(false) {
-                let _ = w.show();
-            }
-        }
-        let _ = handle.emit_to("flowbar", "toggle-recording", ());
+        trigger_dictation(&handle);
     })
     .map_err(|e| format!("Failed to register hotkey '{}': {}", hotkey, e))
+}
+
+/// Toggle dictation from a hotkey, whatever kind of hotkey it was.
+fn trigger_dictation(handle: &AppHandle) {
+    if let Some(w) = handle.get_webview_window("flowbar") {
+        // Show but DO NOT focus — the Flow Bar is non-activating so the user's text
+        // field keeps focus (that's what lets us paste into it).
+        if !w.is_visible().unwrap_or(false) {
+            let _ = w.show();
+        }
+    }
+    let _ = handle.emit_to("flowbar", "toggle-recording", ());
 }
 
 // --- Recording pipeline commands ---
@@ -318,6 +543,7 @@ fn stop_recording(
 /// Transcribe the most recently captured audio; store the raw text in state.
 #[tauri::command]
 async fn transcribe(state: State<'_, AppState>) -> Result<String, String> {
+    let t_total = std::time::Instant::now();
     let audio = { state.last_audio.lock().clone() };
     if audio.is_empty() {
         return Err("No audio captured".into());
@@ -346,6 +572,10 @@ async fn transcribe(state: State<'_, AppState>) -> Result<String, String> {
     .await
     .map_err(|e| format!("Transcription task failed: {}", e))??;
 
+    log::info!(
+        "transcribe command total: {}ms",
+        t_total.elapsed().as_millis()
+    );
     *state.last_raw_text.lock() = Some(result.clone());
     Ok(result)
 }
@@ -435,6 +665,169 @@ fn copy_to_clipboard(app: AppHandle, text: String) -> Result<(), String> {
 #[tauri::command]
 fn paste_to_active() -> Result<(), String> {
     app_context::send_ctrl_v()
+}
+
+/// What the OS currently lets Voxable do. Checked, never prompted.
+#[derive(serde::Serialize)]
+struct PermissionStatus {
+    platform: String,
+    /// macOS: Accessibility, needed for auto-paste and the Fn key. Always true on
+    /// Windows, which needs no equivalent grant for `SendInput`.
+    accessibility: bool,
+    /// `granted` | `denied` | `not-determined` | `restricted` | `unknown`.
+    microphone: String,
+}
+
+#[tauri::command]
+fn permission_status() -> PermissionStatus {
+    #[cfg(target_os = "macos")]
+    {
+        // The onboarding screen polls this, so log only when something changes.
+        use std::sync::{Mutex, OnceLock};
+        static LAST: OnceLock<Mutex<String>> = OnceLock::new();
+        let current = format!(
+            "accessibility={} microphone={}",
+            macos::accessibility_granted(),
+            macos::microphone_status()
+        );
+        let last = LAST.get_or_init(|| Mutex::new(String::new()));
+        if let Ok(mut last) = last.lock() {
+            if *last != current {
+                log::info!("permissions: {current}");
+                *last = current;
+            }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        PermissionStatus {
+            platform: "macos".into(),
+            accessibility: macos::accessibility_granted(),
+            microphone: macos::microphone_status().into(),
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        PermissionStatus {
+            platform: if cfg!(windows) { "windows".into() } else { "other".into() },
+            accessibility: true,
+            microphone: "granted".into(),
+        }
+    }
+}
+
+/// Show the system's Accessibility prompt. Only the onboarding screen calls this —
+/// macOS shows the dialog once per app, so firing it unasked wastes the one chance.
+#[tauri::command]
+fn request_accessibility() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        macos::prompt_for_accessibility()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        true
+    }
+}
+
+/// Show the microphone permission prompt.
+#[tauri::command]
+fn request_microphone(recorder: State<'_, Recorder>) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        // Not by opening the input stream: a grant that arrives that way leaves
+        // AVFoundation's cached authorization status reading `not-determined` for the
+        // rest of the process, which strands the onboarding screen. See
+        // `macos::request_microphone_access`.
+        let _ = recorder;
+        macos::request_microphone_access();
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        recorder.start()?;
+        let _ = recorder.stop();
+        Ok(())
+    }
+}
+
+/// Open the OS privacy settings at a specific pane.
+#[tauri::command]
+fn open_privacy_settings(pane: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let anchor = match pane.as_str() {
+            "microphone" => "Privacy_Microphone",
+            "input-monitoring" => "Privacy_ListenEvent",
+            "keyboard" => "keyboard",
+            _ => "Privacy_Accessibility",
+        };
+        macos::open_privacy_pane(anchor)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = pane;
+        Err("Voxable needs no extra permissions on this platform".into())
+    }
+}
+
+/// Mark first-launch setup as done and close the onboarding window.
+#[tauri::command]
+fn complete_onboarding(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let settings = {
+        let mut s = state.settings.lock();
+        s.onboarding_complete = true;
+        s.clone()
+    };
+    config::save_settings(&app, &settings)?;
+
+    // The hotkey could not be registered before this point if it needed a
+    // permission the user has just granted, so try again now.
+    if let Err(e) = register_hotkey(&app, &settings.hotkey) {
+        log::warn!("hotkey still not registered after onboarding: {e}");
+    }
+    if let Some(window) = app.get_webview_window("onboarding") {
+        let _ = window.close();
+    }
+    Ok(())
+}
+
+/// Can this shortcut be registered, or is something else already using it?
+///
+/// Answered by actually registering it and letting go again — the OS is the only
+/// authority on what is taken, and a guess here would be wrong for exactly the
+/// combos users care about.
+#[tauri::command]
+fn hotkey_available(app: AppHandle, hotkey: String, state: State<'_, AppState>) -> bool {
+    if hotkey.eq_ignore_ascii_case("fn") {
+        return cfg!(target_os = "macos");
+    }
+    let Ok(shortcut) = Shortcut::from_str(&hotkey) else {
+        return false;
+    };
+
+    let gs = app.global_shortcut();
+    if gs.is_registered(shortcut) {
+        // Already ours: the current hotkey is available to itself.
+        return state.settings.lock().hotkey.eq_ignore_ascii_case(&hotkey);
+    }
+    match gs.register(shortcut) {
+        Ok(()) => {
+            let _ = gs.unregister(shortcut);
+            // Re-register the real hotkey: unregistering can drop our handler.
+            let current = state.settings.lock().hotkey.clone();
+            let _ = register_hotkey(&app, &current);
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+#[tauri::command]
+fn get_stats(state: State<'_, AppState>) -> Result<voxable_core::stats::Stats, String> {
+    let entries = state.history.lock().load_entries()?;
+    let now = chrono::Utc::now().to_rfc3339();
+    Ok(voxable_core::stats::compute(&entries, &now))
 }
 
 #[derive(serde::Serialize)]

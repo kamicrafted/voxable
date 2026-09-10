@@ -1,0 +1,6 @@
+# whisper.cpp (ggml) uses std::filesystem, which libc++ marks unavailable before
+# macOS 10.15. The `cc` crate defaults Apple builds to an older target, so pin it
+# here — a cargo `[env]` entry reaches build scripts no matter how cargo is invoked.
+# Ignored on non-Apple platforms.
+[env]
+MACOSX_DEPLOYMENT_TARGET = "11.0"

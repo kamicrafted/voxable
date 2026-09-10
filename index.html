@@ -10,11 +10,12 @@
     <div id="app">
       <header id="titlebar">
         <span class="logo">🎙️ Voxable</span>
-        <span id="model-badge" class="badge"></span>
+        <span id="model-badge" class="badge" title="The Whisper speech model doing the transcribing"></span>
       </header>
 
       <nav id="tabs">
-        <button class="tab active" data-tab="dictation">Dictation</button>
+        <button class="tab active" data-tab="home">Home</button>
+        <button class="tab" data-tab="dictation">Dictation</button>
         <button class="tab" data-tab="settings">Settings</button>
         <button class="tab" data-tab="dictionary">Dictionary</button>
         <button class="tab" data-tab="snippets">Snippets</button>
@@ -22,8 +23,46 @@
       </nav>
 
       <main id="panels">
+        <!-- Home -->
+        <section class="panel active" data-panel="home">
+          <div class="home-hero">
+            <div class="home-hero-label">Words dictated</div>
+            <div class="home-hero-value" id="stat-words">—</div>
+            <div class="home-hero-sub" id="stat-words-week"></div>
+          </div>
+
+          <div class="stat-grid">
+            <div class="stat-card">
+              <div class="stat-value" id="stat-saved">—</div>
+              <div class="stat-label">Time saved <span class="stat-help" title="Compared with typing the same words at 40 wpm">?</span></div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="stat-wpm">—</div>
+              <div class="stat-label">Words per minute</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="stat-dictations">—</div>
+              <div class="stat-label">Dictations</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="stat-top-app">—</div>
+              <div class="stat-label">Most used in</div>
+            </div>
+          </div>
+
+          <div class="home-recent">
+            <div class="home-recent-head">
+              <h2>Recent</h2>
+              <button id="view-all-history" class="link-btn">View all history</button>
+            </div>
+            <div id="recent-list" class="recent-list"></div>
+          </div>
+
+          <div id="home-hotkey" class="home-hotkey"></div>
+        </section>
+
         <!-- Dictation -->
-        <section class="panel active" data-panel="dictation">
+        <section class="panel" data-panel="dictation">
           <div id="status-area">
             <div id="status-indicator" class="idle"></div>
             <div id="status-text">Ready</div>
@@ -39,9 +78,7 @@
               <button id="copy-btn">Copy</button>
             </div>
           </div>
-          <div id="hotkey-hint">
-            <kbd>Win</kbd>+<kbd>Alt</kbd>+<kbd>Space</kbd> to toggle from anywhere
-          </div>
+          <div id="hotkey-hint"></div>
         </section>
 
         <!-- Settings -->
@@ -115,8 +152,13 @@
 
           <div class="setting-group">
             <label>Hotkey</label>
-            <input type="text" id="hotkey-input" placeholder="Super+Alt+Space" />
-            <div class="setting-hint">e.g. Super+Alt+Space, Ctrl+Shift+D</div>
+            <div class="hotkey-field">
+              <button type="button" id="hotkey-record" class="hotkey-display">
+                <span id="hotkey-keys"></span>
+              </button>
+              <button type="button" id="hotkey-reset" class="link-btn">Reset to default</button>
+            </div>
+            <div class="setting-hint" id="hotkey-status">Click, then press the keys you want.</div>
           </div>
 
           <div class="setting-group row">

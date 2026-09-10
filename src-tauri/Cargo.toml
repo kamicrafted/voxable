@@ -1,6 +1,6 @@
 [package]
 name = "voxable"
-version = "0.2.0"
+version = "0.3.0"
 description = "Voxable - local voice dictation with AI cleanup"
 authors = ["Dave Yoon"]
 license = "MIT"
@@ -18,7 +18,9 @@ metal = ["whisper-rs/metal"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon"] }
+# macos-private-api: required for the transparent Flow Bar window on macOS.
+# Pairs with app.macOSPrivateApi in tauri.conf.json; both are needed.
+tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-clipboard-manager = "2"
 parking_lot = "0.12"
@@ -35,6 +37,16 @@ uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["clock"] }
 # Pure logic lives here (omp owns it; testable with rustup alone).
 voxable-core = { path = "../voxable-core" }
+
+# macOS: Fn-key event tap, synthesized Cmd+V, permission checks, frontmost app.
+[target.'cfg(target_os = "macos")'.dependencies]
+core-graphics = "0.24"
+core-foundation = "0.10"
+objc2 = "0.6"
+objc2-foundation = "0.3"
+objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSRunningApplication"] }
+# The AVFoundation microphone prompt takes a completion block.
+block2 = "0.6"
 
 # Win32: foreground-app detection, non-activating Flow Bar, synthesized paste.
 [target.'cfg(windows)'.dependencies]
