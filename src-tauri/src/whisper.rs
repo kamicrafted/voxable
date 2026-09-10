@@ -117,8 +117,18 @@ impl WhisperEngine {
         // VAD: trim leading/trailing silence to speed up transcription
         // (implementation lives in voxable-core, unit-tested there).
         let t_start = std::time::Instant::now();
-        let trimmed = voxable_core::vad::trim_silence(audio, 0.01, 30);
+        let trimmed = voxable_core::vad::trim_silence(audio);
         if trimmed.is_empty() {
+            return Ok(String::new());
+        }
+        // Whisper does not fail on a fragment, it invents words — a 0.1s clip once
+        // produced a phrase that was never spoken. Better to report nothing.
+        const MIN_SPEECH_SAMPLES: usize = 16_000 / 4; // 250 ms
+        if trimmed.len() < MIN_SPEECH_SAMPLES {
+            log::info!(
+                "transcribe: only {}ms of speech; too short to transcribe reliably",
+                trimmed.len() * 1000 / 16_000
+            );
             return Ok(String::new());
         }
         let trim_ms = t_start.elapsed().as_millis();
