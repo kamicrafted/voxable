@@ -108,7 +108,14 @@ impl WhisperEngine {
 
     /// Transcribe raw f32 PCM audio (16kHz mono) to text.
     /// `language` is a BCP-47 code ("en", "es", etc.) or "auto" for detection.
-    pub fn transcribe(&mut self, audio: &[f32], language: &str) -> Result<String, String> {
+    /// `vocabulary` primes the decoder (see `prompt::build_whisper_vocabulary`);
+    /// pass an empty string for none.
+    pub fn transcribe(
+        &mut self,
+        audio: &[f32],
+        language: &str,
+        vocabulary: &str,
+    ) -> Result<String, String> {
         let ctx = self
             .ctx
             .as_ref()
@@ -170,6 +177,13 @@ impl WhisperEngine {
         }
         params.set_suppress_blank(true);
         params.set_suppress_nst(true);
+        // Teaching whisper the user's proper nouns at decode time. Without this a
+        // name it has never seen comes out as whatever sounds closest, and no amount
+        // of correcting the text afterwards can recover a name it never produced.
+        if !vocabulary.is_empty() {
+            log::info!("transcribe: priming with {vocabulary:?}");
+            params.set_initial_prompt(vocabulary);
+        }
 
         let t_state = std::time::Instant::now();
         let mut state = ctx.create_state().map_err(|e| e.to_string())?;

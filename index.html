@@ -204,10 +204,10 @@
 
         <!-- Dictionary -->
         <section class="panel" data-panel="dictionary">
-          <p class="panel-hint">Corrections injected into the cleanup prompt (spoken word → written form).</p>
+          <p class="panel-hint">Names and terms Whisper gets wrong. The <strong>written form</strong> is taught to Whisper directly, so it spells the word correctly in the first place — no LLM needed. The <strong>misheard</strong> side is only used to correct leftovers, and needs an LLM key under Settings. Write what Whisper actually types, not how you pronounce it.</p>
           <div class="crud-add">
-            <input type="text" id="dict-word" placeholder="spoken (e.g. voxable)" />
-            <input type="text" id="dict-replacement" placeholder="written (e.g. Voxable)" />
+            <input type="text" id="dict-word" placeholder="misheard as (e.g. vox able)" />
+            <input type="text" id="dict-replacement" placeholder="written form (e.g. Voxable)" />
             <button id="dict-add">Add</button>
           </div>
           <div id="dict-list" class="crud-list"></div>
@@ -215,7 +215,7 @@
 
         <!-- Snippets -->
         <section class="panel" data-panel="snippets">
-          <p class="panel-hint">Trigger phrases expanded before cleanup (whole-word, case-insensitive).</p>
+          <p class="panel-hint">Say the trigger, get the expansion. Matching is whole-word and case-insensitive, against what Whisper typed — so triggers are also taught to Whisper, which is what stops an unusual phrase being transcribed as something else and silently never matching.</p>
           <div class="crud-add">
             <input type="text" id="snip-trigger" placeholder="trigger (e.g. brb)" />
             <input type="text" id="snip-expansion" placeholder="expansion (e.g. be right back)" />

@@ -629,9 +629,16 @@ async fn transcribe(state: State<'_, AppState>) -> Result<String, String> {
         return Err("No audio captured".into());
     }
 
-    let (model_name, language) = {
+    let (model_name, language, vocabulary) = {
         let settings = state.settings.lock();
-        (settings.whisper_model.clone(), settings.language.clone())
+        (
+            settings.whisper_model.clone(),
+            settings.language.clone(),
+            voxable_core::prompt::build_whisper_vocabulary(
+                &settings.dictionary,
+                &settings.snippets,
+            ),
+        )
     };
 
     // Ensure model is downloaded (no locks held across this await).
@@ -647,7 +654,7 @@ async fn transcribe(state: State<'_, AppState>) -> Result<String, String> {
     let whisper_arc = Arc::clone(&state.whisper);
     let result = tokio::task::spawn_blocking(move || {
         let mut engine = whisper_arc.lock();
-        engine.transcribe(&audio, &language)
+        engine.transcribe(&audio, &language, &vocabulary)
     })
     .await
     .map_err(|e| format!("Transcription task failed: {}", e))??;

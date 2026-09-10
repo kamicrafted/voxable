@@ -4,7 +4,7 @@
 //! (capped at 200 entries). `get_cleanup_prompt` returns the system prompt for a
 //! cleanup level. The actual LLM call (`cleanup_text`) stays in `src-tauri`.
 
-use crate::config::DictEntry;
+use crate::config::{DictEntry, Snippet};
 
 /// Maximum number of dictionary entries injected into the prompt.
 const DICT_PROMPT_CAP: usize = 200;
@@ -25,6 +25,68 @@ pub fn build_dictionary_prompt(entries: &[DictEntry]) -> String {
         out.push_str(&format!("- {} → {}\n", entry.word, entry.replacement));
     }
     out
+}
+
+/// Characters of vocabulary to hand Whisper. Its prompt window is about 224 tokens
+/// and it is shared with nothing else, but a long list starts steering punctuation
+/// and phrasing as well as spelling, so keep it short.
+const WHISPER_VOCAB_CHARS: usize = 220;
+
+/// Terms to prime Whisper's decoder with, from the dictionary and snippet triggers.
+///
+/// This is conditioning, not search-and-replace: the terms are prepended as context,
+/// which makes the decoder more likely to produce those exact spellings. It is the
+/// only one of the two dictionary mechanisms that works with no LLM configured.
+///
+/// Both sources matter, for different reasons. Dictionary *replacements* are the
+/// spellings the user wants out (the left-hand side is whatever Whisper mishears, so
+/// it would teach it the wrong thing). Snippet *triggers* are phrases the user says
+/// out loud expecting an expansion — and expansion is a text match, so it silently
+/// fails whenever the trigger is transcribed as something else.
+pub fn build_whisper_vocabulary(dictionary: &[DictEntry], snippets: &[Snippet]) -> String {
+    let mut terms: Vec<&str> = Vec::new();
+    let mut seen: Vec<String> = Vec::new();
+
+    for term in dictionary
+        .iter()
+        .map(|e| e.replacement.trim())
+        .chain(snippets.iter().map(|s| s.trigger.trim()))
+    {
+        if term.is_empty() {
+            continue;
+        }
+        let key = term.to_lowercase();
+        if seen.contains(&key) {
+            continue;
+        }
+        seen.push(key);
+        terms.push(term);
+    }
+
+    if terms.is_empty() {
+        return String::new();
+    }
+
+    // Grow up to the cap rather than truncating mid-term, which would prime the
+    // decoder with a fragment.
+    let mut out = String::new();
+    for term in terms {
+        let addition = if out.is_empty() {
+            term.to_string()
+        } else {
+            format!(", {term}")
+        };
+        if out.len() + addition.len() > WHISPER_VOCAB_CHARS {
+            break;
+        }
+        out.push_str(&addition);
+    }
+    if out.is_empty() {
+        return String::new();
+    }
+    // A sentence, not a bare list: Whisper conditions on natural text, and a trailing
+    // period keeps it from running the vocabulary into the transcript.
+    format!("Glossary: {out}.")
 }
 
 /// Return the base cleanup system prompt for a level.
@@ -60,6 +122,87 @@ Keep the original meaning, tone, and level of detail. Do not add information."
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn vocabulary_is_empty_without_entries() {
+        assert_eq!(build_whisper_vocabulary(&[], &[]), "");
+    }
+
+    #[test]
+    fn vocabulary_uses_the_replacement_not_the_misheard_word() {
+        // The left-hand side is whatever Whisper got wrong — priming it with that
+        // would teach the decoder the mistake.
+        let dict = vec![DictEntry {
+            word: "kahmeecrafted".into(),
+            replacement: "Kamicrafted".into(),
+        }];
+        let out = build_whisper_vocabulary(&dict, &[]);
+        assert!(out.contains("Kamicrafted"));
+        assert!(!out.contains("kahmeecrafted"));
+    }
+
+    #[test]
+    fn vocabulary_includes_snippet_triggers() {
+        // Expansion is a text match, so a trigger Whisper mishears never fires.
+        let snips = vec![Snippet {
+            trigger: "kami gmail".into(),
+            expansion: "hello@kamicrafted.com".into(),
+        }];
+        assert!(build_whisper_vocabulary(&[], &snips).contains("kami gmail"));
+    }
+
+    #[test]
+    fn vocabulary_reads_as_a_sentence() {
+        let dict = vec![DictEntry {
+            word: "a".into(),
+            replacement: "Voxable".into(),
+        }];
+        assert_eq!(build_whisper_vocabulary(&dict, &[]), "Glossary: Voxable.");
+    }
+
+    #[test]
+    fn vocabulary_deduplicates_case_insensitively() {
+        let dict = vec![DictEntry {
+            word: "x".into(),
+            replacement: "Voxable".into(),
+        }];
+        let snips = vec![Snippet {
+            trigger: "voxable".into(),
+            expansion: "y".into(),
+        }];
+        assert_eq!(build_whisper_vocabulary(&dict, &snips), "Glossary: Voxable.");
+    }
+
+    #[test]
+    fn vocabulary_stops_at_a_whole_term_not_mid_word() {
+        let dict: Vec<DictEntry> = (0..60)
+            .map(|i| DictEntry {
+                word: format!("w{i}"),
+                replacement: format!("Supercalifragilistic{i}"),
+            })
+            .collect();
+        let out = build_whisper_vocabulary(&dict, &[]);
+        assert!(out.len() <= WHISPER_VOCAB_CHARS + "Glossary: .".len());
+        // No trailing fragment: the last term before the period is complete.
+        let body = out
+            .trim_start_matches("Glossary: ")
+            .trim_end_matches('.');
+        for term in body.split(", ") {
+            assert!(
+                dict.iter().any(|d| d.replacement == term),
+                "truncated term: {term}"
+            );
+        }
+    }
+
+    #[test]
+    fn vocabulary_skips_blank_entries() {
+        let dict = vec![DictEntry {
+            word: "x".into(),
+            replacement: "   ".into(),
+        }];
+        assert_eq!(build_whisper_vocabulary(&dict, &[]), "");
+    }
 
     fn entry(word: &str, replacement: &str) -> DictEntry {
         DictEntry {
