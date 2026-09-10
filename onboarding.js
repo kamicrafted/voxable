@@ -8,6 +8,10 @@ import { invoke } from "@tauri-apps/api/core";
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
+// Set once the screen has decided to close itself, so polling cannot queue a
+// second finish.
+let finishing = false;
+
 const LABELS = {
   granted: "Allowed",
   denied: "Denied",
@@ -50,6 +54,16 @@ async function refresh() {
   $('[data-action="done"]').textContent = ready
     ? "Start using Voxable"
     : "Continue without microphone";
+
+  // Both granted means there is nothing left to do on this screen, so finish on
+  // its own rather than making the user hunt for the button. The pause is so the
+  // confirmation is readable, not decorative.
+  if (ready && status.accessibility && !finishing) {
+    finishing = true;
+    $("#allset").hidden = false;
+    $$(".ob-footer button").forEach((btn) => (btn.disabled = true));
+    setTimeout(() => invoke("complete_onboarding").catch(console.error), 1600);
+  }
 }
 
 const actions = {

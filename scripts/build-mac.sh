@@ -25,6 +25,18 @@ npm run tauri build -- "${FEATURES[@]}" --bundles app
 APP="target/release/bundle/macos/Voxable.app"
 [[ -d "$APP" ]] || { echo "Expected $APP — the build did not produce it" >&2; exit 1; }
 
+# macOS attaches Accessibility and Microphone grants to the app's code signature.
+# Tauri signs ad-hoc, which changes every build, so each rebuild silently loses the
+# permissions. Re-sign with a stable identity when one exists.
+IDENTITY="${VOXABLE_SIGN_IDENTITY:-Voxable Dev}"
+if security find-identity -v -p codesigning 2>/dev/null | grep -q "$IDENTITY"; then
+  codesign --force --deep --sign "$IDENTITY" "$APP"
+  echo "Signed with \"$IDENTITY\" — permissions carry over between builds."
+else
+  echo "No \"$IDENTITY\" signing identity: this build is ad-hoc signed, so macOS will"
+  echo "ask for Accessibility and Microphone again. Run ./scripts/create-signing-identity.sh once to stop that."
+fi
+
 VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
 ARCH=$([[ "$(uname -m)" == "arm64" ]] && echo aarch64 || echo x64)
 DMG="target/release/bundle/dmg/Voxable_${VERSION}_${ARCH}.dmg"

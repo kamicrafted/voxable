@@ -595,6 +595,24 @@ struct PermissionStatus {
 fn permission_status() -> PermissionStatus {
     #[cfg(target_os = "macos")]
     {
+        // The onboarding screen polls this, so log only when something changes.
+        use std::sync::{Mutex, OnceLock};
+        static LAST: OnceLock<Mutex<String>> = OnceLock::new();
+        let current = format!(
+            "accessibility={} microphone={}",
+            macos::accessibility_granted(),
+            macos::microphone_status()
+        );
+        let last = LAST.get_or_init(|| Mutex::new(String::new()));
+        if let Ok(mut last) = last.lock() {
+            if *last != current {
+                log::info!("permissions: {current}");
+                *last = current;
+            }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
         PermissionStatus {
             platform: "macos".into(),
             accessibility: macos::accessibility_granted(),

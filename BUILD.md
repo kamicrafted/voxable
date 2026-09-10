@@ -101,6 +101,26 @@ Output: `target/release/bundle/` — `macos/Voxable.app` and
 build is portable. Code signing / notarization is not set up — for personal use,
 right-click → Open the first time, or `xattr -dr com.apple.quarantine <app>`.
 
+### Permissions and code signing (local development)
+
+macOS attaches an Accessibility or Microphone grant to the app's **code signature**.
+Tauri signs ad-hoc, and an ad-hoc signature changes with every build, so each rebuild
+looks like a new app and the permission you granted stops applying — while often still
+showing as switched on in System Settings, which makes it look like the app is broken.
+
+Fix it once:
+
+```bash
+./scripts/create-signing-identity.sh          # self-signed "Voxable Dev" identity
+tccutil reset Accessibility com.voxable.app   # clear grants tied to old signatures
+tccutil reset Microphone com.voxable.app
+./scripts/build-mac.sh                        # signs with the identity when present
+```
+
+`build-mac.sh` re-signs with that identity automatically and says so; without it, it
+prints a warning instead. The identity is for local development only — it is not a
+Developer ID and does nothing for Gatekeeper on anyone else's machine.
+
 ### Three macOS build fixes (already in the repo)
 
 - **Deployment target.** ggml uses `std::filesystem`, which libc++ marks unavailable

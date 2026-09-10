@@ -21,4 +21,9 @@ fn link_compiler_rt() {
 
     println!("cargo:rustc-link-search=native={dir}");
     println!("cargo:rustc-link-lib=static=clang_rt.osx");
+
+    // The microphone permission check looks up AVCaptureDevice by name at runtime.
+    // Nothing else in the binary pulls AVFoundation in, and without the framework
+    // the lookup fails and every mic status reads as "unknown".
+    println!("cargo:rustc-link-lib=framework=AVFoundation");
 }

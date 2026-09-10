@@ -250,3 +250,27 @@ kbd {
   font-family: inherit;
   font-size: 12px;
 }
+
+/* All-set banner */
+
+.ob-allset {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  background: rgba(34, 196, 147, 0.12);
+  color: #0f8f68;
+  font-weight: 600;
+}
+
+.ob-allset-mark {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--done);
+  color: #fff;
+  font-size: 12px;
+}
