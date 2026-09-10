@@ -31,6 +31,14 @@ pub struct Settings {
     pub snippets: Vec<Snippet>,
     /// False until the user has been through the first-launch permission screen.
     pub onboarding_complete: bool,
+    /// Hide the Flow Bar entirely when idle instead of shrinking it to a dot.
+    /// Nothing is left on screen, so the tray's "Show Flow Bar" is the way back.
+    #[serde(default)]
+    pub flowbar_hide_when_idle: bool,
+    /// The update version the user has already been told about, so a new release is
+    /// announced once rather than at every launch until they act on it.
+    #[serde(default)]
+    pub update_notified_version: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -72,6 +80,8 @@ impl Default for Settings {
             dictionary: Vec::new(),
             snippets: Vec::new(),
             onboarding_complete: false,
+            flowbar_hide_when_idle: false,
+            update_notified_version: None,
         }
     }
 }
@@ -148,6 +158,8 @@ mod tests {
         s.cleanup_level = "high".into();
         s.flowbar_position = Some(FlowbarPosition { x: 10.0, y: 20.0 });
         s.flowbar_hidden_until = Some("2026-09-09T00:00:00Z".into());
+        s.flowbar_hide_when_idle = true;
+        s.update_notified_version = Some("0.9.9".into());
         s.dictionary.push(DictEntry { word: "voxable".into(), replacement: "Voxable".into() });
         s.snippets.push(Snippet { trigger: "brb".into(), expansion: "be right back".into() });
         let json = serde_json::to_string(&s).unwrap();
@@ -157,6 +169,8 @@ mod tests {
         assert_eq!(back.mic_device, "default");
         assert_eq!(back.flowbar_position, Some(FlowbarPosition { x: 10.0, y: 20.0 }));
         assert_eq!(back.flowbar_hidden_until.as_deref(), Some("2026-09-09T00:00:00Z"));
+        assert!(back.flowbar_hide_when_idle);
+        assert_eq!(back.update_notified_version.as_deref(), Some("0.9.9"));
         assert!(back.sound_enabled);
         assert_eq!(back.dictionary[0].word, "voxable");
         assert_eq!(back.snippets[0].expansion, "be right back");

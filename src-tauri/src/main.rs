@@ -8,6 +8,7 @@ mod config;
 mod llm;
 #[cfg(target_os = "macos")]
 mod macos;
+mod update;
 mod whisper;
 
 use audio::Recorder;
@@ -54,6 +55,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .manage(PendingUpdate::default())
         .manage(app_state)
         .manage(Recorder::new())
         // Single global handler for BOTH the tray menu and the Flow Bar
@@ -80,6 +82,28 @@ fn main() {
             }
             "show_flowbar" => {
                 clear_flowbar_hide(app);
+            }
+            "check_updates" => {
+                let handle = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let result = update::check(env!("CARGO_PKG_VERSION")).await;
+                    if let Some(hub) = handle.get_webview_window("hub") {
+                        center_on_active_monitor(&handle, &hub);
+                        let _ = hub.show();
+                        let _ = hub.set_focus();
+                    }
+                    match result {
+                        Ok(Some(info)) => {
+                            let _ = handle.emit_to("hub", "update-available", &info);
+                        }
+                        Ok(None) => {
+                            let _ = handle.emit_to("hub", "update-none", ());
+                        }
+                        Err(e) => {
+                            let _ = handle.emit_to("hub", "update-error", e);
+                        }
+                    }
+                });
             }
             _ => {}
         })
@@ -122,11 +146,20 @@ fn main() {
                 MenuItem::with_id(&handle, "open_settings", "Settings", true, None::<&str>)?;
             let showbar_item =
                 MenuItem::with_id(&handle, "show_flowbar", "Show Flow Bar", true, None::<&str>)?;
+            let check_updates =
+                MenuItem::with_id(&handle, "check_updates", "Check for Updates…", true, None::<&str>)?;
             let sep = PredefinedMenuItem::separator(&handle)?;
             let quit_item = PredefinedMenuItem::quit(&handle, Some("Quit"))?;
             let menu = Menu::with_items(
                 &handle,
-                &[&show_item, &settings_item, &showbar_item, &sep, &quit_item],
+                &[
+                    &show_item,
+                    &settings_item,
+                    &showbar_item,
+                    &check_updates,
+                    &sep,
+                    &quit_item,
+                ],
             )?;
 
             let mut tray_builder = TrayIconBuilder::with_id("voxable-tray")
@@ -172,6 +205,42 @@ fn main() {
                 } else {
                     let _ = flowbar.show();
                 }
+            }
+
+            // --- Update check, in the background so launch never waits on the network ---
+            {
+                let handle = app.handle().clone();
+                let already_told = settings.update_notified_version.clone();
+                tauri::async_runtime::spawn(async move {
+                    match update::check(env!("CARGO_PKG_VERSION")).await {
+                        Ok(Some(info)) => {
+                            // Announce a version once. Without this the Hub would open
+                            // at every launch until the user got around to updating.
+                            if already_told.as_deref() == Some(info.version.as_str()) {
+                                log::info!("update {} already announced", info.version);
+                                return;
+                            }
+                            log::info!("update available: {}", info.version);
+                            *handle.state::<PendingUpdate>().0.lock() = Some(info.clone());
+                            let state = handle.state::<AppState>();
+                            let settings = {
+                                let mut s = state.settings.lock();
+                                s.update_notified_version = Some(info.version.clone());
+                                s.clone()
+                            };
+                            let _ = config::save_settings(&handle, &settings);
+
+                            let _ = handle.emit_to("hub", "update-available", &info);
+                            if let Some(hub) = handle.get_webview_window("hub") {
+                                center_on_active_monitor(&handle, &hub);
+                                let _ = hub.show();
+                                let _ = hub.set_focus();
+                            }
+                        }
+                        Ok(None) => log::info!("no update available"),
+                        Err(e) => log::warn!("update check failed: {e}"),
+                    }
+                });
             }
 
             // --- First launch: permission walkthrough ---
@@ -227,6 +296,10 @@ fn main() {
             request_microphone,
             fit_flowbar,
             log_from_ui,
+            check_for_update,
+            open_release_page,
+            app_version,
+            pending_update,
             open_privacy_settings,
             complete_onboarding,
             hotkey_available,
@@ -381,6 +454,9 @@ fn clear_flowbar_hide(app: &AppHandle) {
     let _ = config::save_settings(app, &settings);
     if let Some(w) = app.get_webview_window("flowbar") {
         let _ = w.show();
+        // Asking for the Flow Bar means wanting it to stay: with hide-when-idle on it
+        // would otherwise disappear again a second later, before it can be moved.
+        let _ = app.emit_to("flowbar", "flowbar-pinned", ());
     }
 }
 
@@ -756,6 +832,39 @@ fn request_microphone(recorder: State<'_, Recorder>) -> Result<(), String> {
         let _ = recorder.stop();
         Ok(())
     }
+}
+
+/// What the launch check found, if anything.
+///
+/// The event alone is not enough: the check finishes a few hundred milliseconds after
+/// startup, and the Hub's webview may not have registered its listener yet — the
+/// banner then never appears even though the update was found. The Hub asks for this
+/// on load, so the result cannot be missed regardless of which happens first.
+#[derive(Default)]
+struct PendingUpdate(parking_lot::Mutex<Option<update::UpdateInfo>>);
+
+/// The update the launch check found, for the Hub to render once it is ready.
+#[tauri::command]
+fn pending_update(state: State<'_, PendingUpdate>) -> Option<update::UpdateInfo> {
+    state.0.lock().clone()
+}
+
+/// Check GitHub for a newer release. `None` means nothing newer to offer.
+#[tauri::command]
+async fn check_for_update() -> Result<Option<update::UpdateInfo>, String> {
+    update::check(env!("CARGO_PKG_VERSION")).await
+}
+
+/// Open the release page so the user can download it.
+#[tauri::command]
+fn open_release_page(url: String) -> Result<(), String> {
+    update::open_in_browser(&url)
+}
+
+/// The version this build reports, for the Hub to show next to the update notice.
+#[tauri::command]
+fn app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
 }
 
 /// Write a line from a webview into the app log.

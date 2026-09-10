@@ -86,6 +86,15 @@ async function setPillSize({ w, h, radius }) {
 
 async function expand() {
   cancelCollapse();
+  pinned = false;
+  // Under hide-when-idle the window is hidden rather than collapsed, so showing it
+  // is the expand. Rust already shows it on the hotkey path; this covers the rest.
+  try {
+    const win = getCurrentWindow();
+    if (!(await win.isVisible())) await win.show();
+  } catch (e) {
+    uiLog("error", `could not show the Flow Bar: ${e}`);
+  }
   if (!collapsed) return;
   try {
     collapsed = false;
@@ -96,8 +105,25 @@ async function expand() {
   }
 }
 
+/// Pinned by the tray's "Show Flow Bar": stays put until the next dictation.
+///
+/// Without this, hide-when-idle leaves nothing to grab — the pill would vanish 1.5s
+/// after being shown, which is not long enough to reposition it.
+let pinned = false;
+
 async function collapse() {
-  if (collapsed || isRecording || busy) return;
+  if (collapsed || isRecording || busy || pinned) return;
+
+  // Hide-when-idle: nothing on screen at all rather than a dot.
+  if (settings.flowbar_hide_when_idle) {
+    try {
+      await getCurrentWindow().hide();
+    } catch (e) {
+      uiLog("error", `could not hide the Flow Bar: ${e}`);
+    }
+    return;
+  }
+
   try {
     collapsed = true;
     document.body.classList.add("collapsed");
@@ -319,6 +345,13 @@ listen("dictation-complete", (e) => {
 });
 
 listen("settings-changed", refreshSettings);
+
+// The tray asked for the Flow Bar: keep it up so it can be moved, and make sure it
+// is the full pill rather than a dot, since the point is to grab it.
+listen("flowbar-pinned", async () => {
+  await expand();
+  pinned = true;
+});
 
 // Start collapsed-after-idle like any other idle moment, and read settings once so
 // the first dictation does not have to wait for them.

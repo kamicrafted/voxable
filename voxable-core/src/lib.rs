@@ -19,3 +19,4 @@ pub mod screen;
 pub mod history;
 pub mod hotkey;
 pub mod vad;
+pub mod version;

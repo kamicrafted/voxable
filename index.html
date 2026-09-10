@@ -13,6 +13,17 @@
         <span id="model-badge" class="badge" title="The Whisper speech model doing the transcribing"></span>
       </header>
 
+      <div id="update-banner" hidden>
+        <div class="update-text">
+          <strong id="update-title">An update is available</strong>
+          <div class="setting-hint" id="update-notes"></div>
+        </div>
+        <div class="update-actions">
+          <button type="button" id="update-download">Download</button>
+          <button type="button" id="update-dismiss" class="link-btn">Later</button>
+        </div>
+      </div>
+
       <nav id="tabs">
         <button class="tab active" data-tab="home">Home</button>
         <button class="tab" data-tab="dictation">Dictation</button>
@@ -168,6 +179,14 @@
             </div>
             <input type="checkbox" id="auto-paste" checked />
           </div>
+          <div class="setting-group row">
+            <div>
+              <label>Hide the Flow Bar when idle</label>
+              <div class="setting-hint">Disappears completely instead of shrinking to a mic dot. Bring it back from the menu-bar icon → Show Flow Bar.</div>
+            </div>
+            <input type="checkbox" id="flowbar-hide-when-idle" />
+          </div>
+
           <div class="setting-group row">
             <label>Sound feedback</label>
             <input type="checkbox" id="sound-enabled" checked />

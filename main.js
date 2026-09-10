@@ -134,6 +134,70 @@ listen("dictation-complete", (e) => {
   setStatus("done", "Done");
 });
 
+// --- Updates ---
+
+let pendingUpdate = null;
+
+function showUpdate(info) {
+  pendingUpdate = info;
+  $("#update-title").textContent = `Voxable ${info.version} is available`;
+  // Release notes are markdown. Prefer the bullet points — those are the changes —
+  // over the opening paragraph, which describes the app rather than what is new.
+  const lines = (info.notes || "").split("\n");
+  const bullets = lines
+    .filter((l) => /^\s*[-*]\s+/.test(l))
+    .map((l) =>
+      l
+        .replace(/^\s*[-*]\s+/, "")
+        .replace(/\*\*/g, "")
+        .replace(/`/g, "")
+        .trim()
+    )
+    .filter(Boolean);
+  const summary = bullets.length
+    ? bullets.slice(0, 3).join(" · ")
+    : lines.find((l) => l.trim() && !l.startsWith("#"))?.trim() || "";
+  $("#update-notes").textContent = summary;
+  $("#update-banner").hidden = false;
+}
+
+function showUpdateMessage(text) {
+  pendingUpdate = null;
+  $("#update-title").textContent = text;
+  $("#update-notes").textContent = "";
+  $("#update-download").hidden = true;
+  $("#update-banner").hidden = false;
+}
+
+listen("update-available", (e) => {
+  $("#update-download").hidden = false;
+  showUpdate(e.payload);
+});
+
+// The launch check can finish before this window is listening, so ask for whatever
+// it found rather than relying on having caught the event.
+invoke("pending_update")
+  .then((info) => {
+    if (info) {
+      $("#update-download").hidden = false;
+      showUpdate(info);
+    }
+  })
+  .catch((e) => uiLog("error", `could not read the pending update: ${e}`));
+listen("update-none", () => showUpdateMessage("Voxable is up to date."));
+listen("update-error", (e) => showUpdateMessage(`Could not check for updates: ${e.payload}`));
+
+$("#update-download")?.addEventListener("click", () => {
+  if (!pendingUpdate) return;
+  invoke("open_release_page", { url: pendingUpdate.url }).catch((err) =>
+    uiLog("error", `could not open the release page: ${err}`)
+  );
+});
+
+$("#update-dismiss")?.addEventListener("click", () => {
+  $("#update-banner").hidden = true;
+});
+
 // --- Settings ---
 
 function getPresetFromUrl(url) {
@@ -178,6 +242,7 @@ function populateSettings(s) {
   $("#language-select").value = s.language || "en";
   $("#auto-paste").checked = s.auto_paste !== false;
   $("#sound-enabled").checked = s.sound_enabled !== false;
+  $("#flowbar-hide-when-idle").checked = s.flowbar_hide_when_idle === true;
   $("#custom-prompt").value = s.custom_prompt || "";
 }
 
@@ -195,6 +260,7 @@ $("#save-settings").addEventListener("click", async () => {
     language: $("#language-select").value,
     auto_paste: $("#auto-paste").checked,
     sound_enabled: $("#sound-enabled").checked,
+    flowbar_hide_when_idle: $("#flowbar-hide-when-idle").checked,
     custom_prompt: $("#custom-prompt").value.trim(),
   };
   try {
