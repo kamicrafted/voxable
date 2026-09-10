@@ -137,6 +137,13 @@ window.addEventListener("contextmenu", (e) => {
 // The Rust global shortcut is the sole hotkey owner; it emits this to us.
 listen("toggle-recording", toggle);
 
+// Push-to-talk: the hotkey was held rather than tapped, so releasing it ends
+// dictation. stopRecording() guards on its own state, so this is safely ignored if
+// we are not recording or are already transcribing.
+listen("stop-recording", () => {
+  if (isRecording) stopRecording();
+});
+
 // Any dictation completing (e.g. initiated from the Hub) updates the preview.
 listen("dictation-complete", (e) => {
   if (busy) return; // our own run already handled the UI

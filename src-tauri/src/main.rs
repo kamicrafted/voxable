@@ -23,6 +23,8 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use voxable_core::history::HistoryEntry;
 use whisper::AppState;
+use std::sync::atomic::{AtomicBool, Ordering};
+use voxable_core::hotkey;
 use voxable_core::screen;
 
 // Flow Bar logical size (must match tauri.conf.json + flowbar.css).
@@ -453,8 +455,33 @@ fn register_hotkey(app: &AppHandle, hotkey: &str) -> Result<(), String> {
     // key event, only a modifier-flag change — so it runs through an event tap.
     #[cfg(target_os = "macos")]
     if hotkey.eq_ignore_ascii_case("fn") {
-        let handle = app.clone();
-        return macos::start_fn_listener(move || trigger_dictation(&handle));
+        // One key, both modes. The press toggles as it always has; the release ends
+        // dictation only when the key was held long enough to mean push-to-talk.
+        // `press_started` records which of the two things the press did, because a
+        // press that *stopped* dictation must not be undone by its own release.
+        let press_handle = app.clone();
+        let release_handle = app.clone();
+        let press_started = Arc::new(AtomicBool::new(false));
+        let press_started_r = Arc::clone(&press_started);
+        return macos::start_fn_listener(
+            move || {
+                let was_recording = press_handle
+                    .try_state::<Recorder>()
+                    .map(|r| r.is_recording())
+                    .unwrap_or(false);
+                press_started.store(!was_recording, Ordering::SeqCst);
+                trigger_dictation(&press_handle);
+            },
+            move |held_ms| {
+                let started = press_started_r.load(Ordering::SeqCst);
+                if hotkey::release_action(started, held_ms) == hotkey::ReleaseAction::Stop {
+                    log::info!("Fn held {held_ms}ms — push-to-talk, stopping on release");
+                    // The Flow Bar decides for real: its own guard ignores this when
+                    // it is not recording or is already transcribing.
+                    let _ = release_handle.emit_to("flowbar", "stop-recording", ());
+                }
+            },
+        );
     }
 
     let shortcut =

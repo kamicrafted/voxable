@@ -12,7 +12,7 @@
 //! one that shows the system dialog, and only the onboarding window calls it.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use core_foundation::base::TCFType;
 use core_foundation::dictionary::CFDictionary;
@@ -154,7 +154,12 @@ pub fn send_paste() -> Result<(), String> {
     Ok(())
 }
 
-/// Watch for the Fn / 🌐 key and call `on_press` each time it goes down.
+/// Watch for the Fn / 🌐 key: `on_press` each time it goes down, `on_release` each
+/// time it comes back up, with how long it was held in milliseconds.
+///
+/// The release and its duration are what make push-to-talk possible here. A
+/// registered global shortcut only reports the press, which is why push-to-talk was
+/// deferred on Windows; the tap sees both.
 ///
 /// Fn cannot be a normal global shortcut: Carbon's `RegisterEventHotKey` (what
 /// tauri-plugin-global-shortcut uses) takes a keycode plus Cmd/Opt/Ctrl/Shift, and Fn
@@ -165,9 +170,10 @@ pub fn send_paste() -> Result<(), String> {
 ///
 /// Returns an error when Accessibility has not been granted — starting a tap without
 /// it fails, and a silent failure here reads to the user as "the hotkey is broken".
-pub fn start_fn_listener<F>(on_press: F) -> Result<(), String>
+pub fn start_fn_listener<P, R>(on_press: P, on_release: R) -> Result<(), String>
 where
-    F: Fn() + Send + 'static,
+    P: Fn() + Send + 'static,
+    R: Fn(u64) + Send + 'static,
 {
     if !accessibility_granted() {
         return Err("Accessibility permission is needed to watch for the Fn key".into());
@@ -176,9 +182,11 @@ where
     std::thread::Builder::new()
         .name("voxable-fn-tap".into())
         .spawn(move || {
-            // Fn down and Fn up both arrive as FlagsChanged; only fire on the
-            // transition into "pressed" so one press is one toggle.
+            // Fn down and Fn up both arrive as FlagsChanged, so act only on the
+            // transitions: one press fires on_press once, one release fires
+            // on_release once with the held duration.
             let was_down = Arc::new(AtomicBool::new(false));
+            let pressed_at: Arc<Mutex<Option<std::time::Instant>>> = Arc::new(Mutex::new(None));
 
             let tap = CGEventTap::new(
                 CGEventTapLocation::HID,
@@ -188,9 +196,16 @@ where
                 move |_proxy, _type, event| {
                     let down = event.get_flags().bits() & NX_SECONDARYFNMASK != 0;
                     if down && !was_down.swap(true, Ordering::SeqCst) {
+                        *pressed_at.lock().unwrap() = Some(std::time::Instant::now());
                         on_press();
-                    } else if !down {
-                        was_down.store(false, Ordering::SeqCst);
+                    } else if !down && was_down.swap(false, Ordering::SeqCst) {
+                        let held = pressed_at
+                            .lock()
+                            .unwrap()
+                            .take()
+                            .map(|t| t.elapsed().as_millis() as u64)
+                            .unwrap_or(0);
+                        on_release(held);
                     }
                     None
                 },
