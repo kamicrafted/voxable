@@ -14,18 +14,44 @@ Press a hotkey, speak, and polished text is typed straight into whatever field y
 
 ---
 
+## Download
+
+| Platform | Download | Notes |
+|---|---|---|
+| **macOS** (Apple Silicon) | [**Voxable_0.3.0_aarch64.dmg**](https://github.com/kamicrafted/voxable/releases/download/v0.3.0/Voxable_0.3.0_aarch64.dmg) | Metal-accelerated. macOS 11+. Apple Silicon only — no Intel build. |
+| **Windows** (any x64) | [**Voxable_0.2.0_x64_cpu-setup.exe**](https://github.com/kamicrafted/voxable/releases/download/v0.2.0/Voxable_0.2.0_x64_cpu-setup.exe) · [`.msi`](https://github.com/kamicrafted/voxable/releases/download/v0.2.0/Voxable_0.2.0_x64_cpu_en-US.msi) | ~3 MB. Runs anywhere, no GPU needed. **Start here.** |
+| **Windows** (NVIDIA GPU) | [**Voxable_0.2.0_x64_cuda-setup.exe**](https://github.com/kamicrafted/voxable/releases/download/v0.2.0/Voxable_0.2.0_x64_cuda-setup.exe) | ~380 MB. Faster transcription and `large-v3`. Bundles the CUDA runtime — no toolkit needed, works on RTX 20xx–50xx. |
+
+The Windows installers are still at **v0.2.0**: everything in v0.3.0 is macOS-specific, and the
+Windows build has not been rebuilt on top of it yet. Every version lives on the
+[releases page](https://github.com/kamicrafted/voxable/releases).
+
+**Neither build is notarized or signed with a paid certificate**, so the OS will object the first time:
+
+- **macOS** — Gatekeeper refuses to open it. Right-click the app → **Open**, then **Open** again in the
+  dialog. Once per install. Voxable also asks for **Microphone** and **Accessibility** on first
+  launch; Accessibility is what lets it watch the hotkey and paste for you.
+- **Windows** — SmartScreen warns. Click **More info → Run anyway**.
+
+The first dictation downloads a Whisper model (~74 MB for `base`), so it takes a moment longer than
+the rest.
+
+---
+
 ## How it works
 
-1. **Record** — global hotkey (`Win`/`Cmd`+`Alt`+`Space`) or a click on the Flow Bar captures the mic.
+1. **Record** — press the hotkey (`fn` on macOS, `Win`+`Alt`+`Space` on Windows) or click the Flow Bar. Tap to start and stop; hold it to talk and release when you're done.
 2. **Transcribe** — a local Whisper model turns speech into text.
 3. **Expand** — snippet triggers are replaced (e.g. `brb` → `be right back`).
 4. **Clean up** — an optional LLM pass (any OpenAI-compatible API) fixes fillers/punctuation/grammar and applies your dictionary corrections.
-5. **Paste** — the result is copied to the clipboard and (on Windows) auto-typed into the focused field.
+5. **Paste** — the result is copied to the clipboard and pasted into the focused field (macOS and Windows).
 
 ## Features
 
 - **Two-window UI** — a minimal **Flow Bar** for the daily loop + a tabbed **Hub** (Dictation, Settings, Dictionary, Snippets, History).
-- **Focus-preserving auto-paste** — the Flow Bar never takes focus, so text lands in your active app (Windows).
+- **Focus-preserving auto-paste** — the Flow Bar never takes focus, so text lands in your active app (macOS and Windows).
+- **Tap or hold** — tap the hotkey for hands-free dictation, or hold it for push-to-talk that ends when you let go. No mode to set (macOS).
+- **`fn` as the hotkey on macOS** — the Globe key does nothing useful by default, and it needs no chord. Any combination works too; the recorder captures a real keypress and checks the OS will allow it.
 - **4-level cleanup** — none / light / medium / high, or your own custom prompt.
 - **Dictionary** — word corrections injected into the LLM prompt.
 - **Snippets** — whole-word, case-insensitive trigger → expansion.
@@ -33,12 +59,15 @@ Press a hotkey, speak, and polished text is typed straight into whatever field y
 - **Local & private** — audio and transcripts never leave your machine (unless you point cleanup at a remote LLM).
 - **GPU optional** — CPU works everywhere; CUDA (NVIDIA) / Metal (Apple Silicon) for faster transcription.
 - **LLM presets** — OpenAI, DeepSeek, Groq, Ollama, LM Studio, or any OpenAI-compatible endpoint.
+- **Usage at a glance** — the Hub's Home tab shows words dictated, time saved, words per minute, your most-used app, and your recent dictations.
+- **Guided permissions** — first launch walks through Microphone and Accessibility, links straight to the right System Settings pane, and prompts nothing until you press the button (macOS).
 
 ---
 
 ## Install
 
-There are no signed release binaries — build from source (it's a normal Tauri app). Pick your platform below. Full details and troubleshooting live in [BUILD.md](BUILD.md).
+Prefer a prebuilt app? See [Download](#download) above. To build it yourself — it's a normal Tauri
+app — pick your platform below. Full details and troubleshooting live in [BUILD.md](BUILD.md).
 
 ### Common prerequisites (all platforms)
 
@@ -106,15 +135,16 @@ npm run tauri build          # CPU; add --features cuda for NVIDIA
 ## First run
 
 1. Launch Voxable — the Flow Bar appears at the bottom-center of your screen.
-2. Open the Hub (tray icon → **Open Voxable**, or right-click the Flow Bar → **Settings**).
-3. (Optional) Set your LLM endpoint + API key + model for cleanup. With no key, you get raw Whisper text.
-4. Press the hotkey (`Win`/`Cmd`+`Alt`+`Space`), speak, and the text lands in your active field.
-5. The first dictation downloads the Whisper model (~74 MB for `base`).
+2. **macOS only:** grant **Microphone** and **Accessibility** when the first-launch screen asks. Accessibility is what lets Voxable watch the hotkey and paste into other apps; without it the hotkey does nothing.
+3. Open the Hub (tray icon → **Open Voxable**, or right-click the Flow Bar → **Settings**).
+4. (Optional) Set your LLM endpoint + API key + model for cleanup. With no key, you get raw Whisper text.
+5. Press the hotkey (`fn` on macOS, `Win`+`Alt`+`Space` on Windows), speak, and the text lands in your active field.
+6. The first dictation downloads the Whisper model (~74 MB for `base`) and warms up the GPU, so it is slower than every one after it.
 
 ## Usage
 
 **Flow Bar** (always-on-top, draggable, non-focus-stealing):
-- Click the mic (or press the hotkey) to start/stop.
+- Click the mic (or tap the hotkey) to start/stop. **Hold** the hotkey instead and dictation ends the moment you release it.
 - Status shows a live timer + waveform while recording, then `Pasted ✓` / `Copied ✓`.
 - Right-click → context menu: *Paste last · History · Settings · Hide for 1 hour · Quit*.
 - Drag to reposition — the position persists.
@@ -188,7 +218,8 @@ Frontend is vanilla JS + Vite (multi-page: `index.html` = Hub, `flowbar.html` = 
 - **Max recording:** 2 minutes per session (auto-stops).
 - **LLM is optional** — no key = raw Whisper text (still useful).
 - **GPU is optional** — CPU is fine; GPU is ~5–10× faster for transcription. CUDA builds are not portable unless built with the shareable script; Metal builds run on macOS only.
-- **Auto-paste** is Windows-only for now.
+- **Auto-paste** works on macOS and Windows; Linux would need an equivalent.
+- **Push-to-talk is macOS-only.** It needs the key release, which the macOS event tap reports and a registered global shortcut does not. Windows taps to toggle.
 - **Not code-signed** — expect SmartScreen (Windows) / Gatekeeper (macOS) on first launch.
 
 Dev/build details: [BUILD.md](BUILD.md) · Project state: [PROJECT_STATE.md](PROJECT_STATE.md)
