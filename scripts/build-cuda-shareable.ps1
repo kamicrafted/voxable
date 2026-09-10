@@ -1,6 +1,7 @@
 # Shareable CUDA build: multi-GPU-arch + self-contained (bundles the CUDA runtime
 # DLLs next to the exe, so it runs on any Windows machine with an NVIDIA driver -
-# no CUDA toolkit / PATH needed). Big installer (~490MB) because cublasLt is 463MB.
+# no CUDA toolkit / PATH needed). Big installer (~400MB) because cublasLt is 463MB.
+# Version is read from package.json so filenames track the real version.
 $ErrorActionPreference = "Continue"
 $proj = "C:\LLM\kami-claude-vault\60-Experiments\omp\Projects\voxable"
 $bundle = "$proj\target\release\bundle"
@@ -12,18 +13,17 @@ $env:CUDA_PATH_V13_3 = $cuda
 $env:CUDAARCHS = "75;86;89;120"
 $env:PATH = "C:\Users\hello\.cargo\bin;C:\Program Files\CMake\bin;$cuda\bin;$env:PATH"
 Set-Location $proj
+$ver = (Get-Content "$proj\package.json" -Raw | ConvertFrom-Json).version
 
-Write-Output "=== Shareable CUDA build (archs $env:CUDAARCHS) ==="
+Write-Output "=== Shareable CUDA build v$ver (archs $env:CUDAARCHS) ==="
 npm run tauri build -- --features cuda --config src-tauri/tauri.cuda.conf.json
 if ($LASTEXITCODE -ne 0) { Write-Output "CUDA BUILD FAILED ($LASTEXITCODE)"; exit 1 }
 
-Copy-Item "$bundle\nsis\Voxable_0.1.0_x64-setup.exe" "$bundle\nsis\Voxable_0.1.0_x64_cuda-setup.exe" -Force
-Copy-Item "$bundle\msi\Voxable_0.1.0_x64_en-US.msi" "$bundle\msi\Voxable_0.1.0_x64_cuda_en-US.msi" -Force
-Remove-Item "$bundle\nsis\Voxable_0.1.0_x64-setup.exe" -Force -ErrorAction SilentlyContinue
-Remove-Item "$bundle\msi\Voxable_0.1.0_x64_en-US.msi" -Force -ErrorAction SilentlyContinue
+Copy-Item "$bundle\nsis\Voxable_${ver}_x64-setup.exe" "$bundle\nsis\Voxable_${ver}_x64_cuda-setup.exe" -Force
+Copy-Item "$bundle\msi\Voxable_${ver}_x64_en-US.msi" "$bundle\msi\Voxable_${ver}_x64_cuda_en-US.msi" -Force
+Remove-Item "$bundle\nsis\Voxable_${ver}_x64-setup.exe" -Force -ErrorAction SilentlyContinue
+Remove-Item "$bundle\msi\Voxable_${ver}_x64_en-US.msi" -Force -ErrorAction SilentlyContinue
 
 Write-Output "=== DLLs bundled next to target/release exe? ==="
 Get-ChildItem "$proj\target\release\*.dll" | Select-Object Name,Length | Format-Table -AutoSize | Out-String | Write-Output
-Write-Output "=== final installers ==="
-Get-ChildItem "$bundle\nsis\*.exe","$bundle\msi\*.msi" | Select-Object Name,Length | Format-Table -AutoSize | Out-String | Write-Output
 Write-Output "ALL_DONE"

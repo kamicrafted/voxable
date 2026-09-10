@@ -192,3 +192,7 @@ Frontend is vanilla JS + Vite (multi-page: `index.html` = Hub, `flowbar.html` = 
 - **Not code-signed** — expect SmartScreen (Windows) / Gatekeeper (macOS) on first launch.
 
 Dev/build details: [BUILD.md](BUILD.md) · Project state: [PROJECT_STATE.md](PROJECT_STATE.md)
+
+## License
+
+[MIT](LICENSE) © Dave Yoon
