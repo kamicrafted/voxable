@@ -14,15 +14,16 @@
     "windows": [
       {
         "label": "flowbar",
+        "windowEffects": { "effects": ["popover"], "state": "active", "radius": 30 },
         "url": "flowbar.html",
         "title": "Voxable",
-        "width": 340,
-        "height": 96,
+        "width": 296,
+        "height": 60,
         "resizable": false,
         "visible": true,
         "decorations": false,
         "transparent": true,
-        "shadow": false,
+        "shadow": true,
         "alwaysOnTop": true,
         "skipTaskbar": true
       },

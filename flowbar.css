@@ -5,8 +5,22 @@
   --accent-2: #7b5cff;
   --rec: #ff4d5e;
   --done: #22c493;
-  --pill-bg: rgba(255, 255, 255, 0.92);
-  --pill-border: rgba(20, 24, 40, 0.06);
+  /* A tint over the native vibrancy, not a background. The blur comes from the
+     window's macOS material (tauri.conf.json windowEffects) — CSS backdrop-filter
+     cannot see past the webview, so it can never blur the desktop. */
+  --pill-bg: rgba(255, 255, 255, 0.34);
+  --pill-border: rgba(255, 255, 255, 0.45);
+}
+
+/* The vibrancy material follows the system appearance, so the pill has to as well —
+   dark text over dark glass is unreadable. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fg: #f2f4f8;
+    --muted: #9aa3b2;
+    --pill-bg: rgba(255, 255, 255, 0.06);
+    --pill-border: rgba(255, 255, 255, 0.12);
+  }
 }
 
 * {
@@ -31,10 +45,12 @@ body {
   cursor: default;
 }
 
-/* The visible pill is inset from the window so its shadow isn't clipped. */
+/* The pill IS the window: native vibrancy fills the whole window rect, so any inset
+   here would show as a hard-edged box around the pill. The window carries the shadow
+   ("shadow": true) and the rounded shape (windowEffects radius). */
 #pill {
   position: absolute;
-  inset: 18px 22px;
+  inset: 0;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -42,8 +58,49 @@ body {
   border-radius: 999px;
   background: var(--pill-bg);
   border: 1px solid var(--pill-border);
-  box-shadow: 0 10px 30px rgba(16, 24, 40, 0.18), 0 2px 6px rgba(16, 24, 40, 0.08);
-  backdrop-filter: blur(20px) saturate(1.4);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+/* --- Collapsed: a glass dot. ---
+   The glass is the visible surface here, same as in the expanded pill, so the mic
+   is a glyph on it rather than an opaque gradient circle covering it. */
+body.collapsed #pill {
+  padding: 0;
+  gap: 0;
+  border-radius: 50%;
+  justify-content: center;
+}
+
+body.collapsed #center,
+body.collapsed #copy {
+  display: none !important;
+}
+
+/* The dot fills its window, so it is its own drag handle and click target. */
+body.collapsed #mic {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: none;
+  box-shadow: none;
+  color: var(--accent);
+}
+
+body.collapsed #mic:hover {
+  transform: none;
+  background: var(--pill-bg);
+}
+
+body.collapsed #mic svg {
+  width: 17px;
+  height: 17px;
+}
+
+@media (prefers-color-scheme: dark) {
+  body.collapsed #mic {
+    /* The indigo accent goes muddy on dark glass. */
+    color: #b9c2ff;
+  }
 }
 
 /* Mic / stop button */

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
+import { playStart, playStop } from "./sounds.js";
 
 const pill = document.getElementById("pill");
 const mic = document.getElementById("mic");
@@ -13,6 +14,96 @@ let busy = false;
 let lastResult = "";
 let timerId = null;
 let elapsed = 0;
+
+// --- Idle collapse ---------------------------------------------------------
+//
+// Idle, the Flow Bar shrinks to a mic dot rather than disappearing. A dot is still
+// a drag handle and a click target, so nothing has to reappear before it can be
+// moved, and there is no invisible window sitting over the screen.
+
+const EXPANDED = { w: 296, h: 60, radius: 30 };
+const COLLAPSED = { w: 44, h: 44, radius: 22 };
+const COLLAPSE_AFTER_MS = 1500;
+
+let collapsed = false;
+let collapseTimer = null;
+
+// Settings are cached rather than fetched per dictation: starting a recording should
+// not wait on an await. Rust emits settings-changed when they are saved.
+let settings = {};
+
+/// Report to the Rust log; release builds have no console to read.
+function uiLog(level, message) {
+  invoke("log_from_ui", { level, message }).catch(() => {});
+}
+
+async function refreshSettings() {
+  try {
+    settings = (await invoke("get_settings")) || {};
+  } catch (e) {
+    console.error("could not read settings:", e);
+  }
+}
+
+async function setPillSize({ w, h, radius }) {
+  const win = getCurrentWindow();
+  uiLog("info", `setPillSize -> ${w}x${h}`);
+  await win.setSize(new LogicalSize(w, h));
+  // The radius belongs to the native vibrancy layer, not to CSS, so it has to be
+  // re-applied at the new size or the dot renders as a rounded square.
+  try {
+    await win.setEffects({ effects: ["popover"], state: "active", radius });
+    uiLog("info", `window effect radius set to ${radius}`);
+  } catch (e) {
+    console.error("could not update the window effect:", e);
+  }
+  // Growing adds width to the right, so a dot near a display edge would expand
+  // off-screen. Rust clamps it back.
+  await invoke("fit_flowbar", { width: w, height: h }).catch(() => {});
+}
+
+async function expand() {
+  cancelCollapse();
+  if (!collapsed) return;
+  try {
+    collapsed = false;
+    document.body.classList.remove("collapsed");
+    await setPillSize(EXPANDED);
+  } catch (e) {
+    uiLog("error", `expand failed: ${e}`);
+  }
+}
+
+async function collapse() {
+  if (collapsed || isRecording || busy) return;
+  try {
+    collapsed = true;
+    document.body.classList.add("collapsed");
+    await setPillSize(COLLAPSED);
+    uiLog("info", "collapsed to dot");
+  } catch (e) {
+    collapsed = false;
+    document.body.classList.remove("collapsed");
+    uiLog("error", `collapse failed: ${e}`);
+  }
+}
+
+function cancelCollapse() {
+  if (collapseTimer) {
+    clearTimeout(collapseTimer);
+    collapseTimer = null;
+  }
+}
+
+/// Collapse once nothing has happened for a beat. Called at every point the pill
+/// becomes idle; recording and transcribing hold it open.
+function scheduleCollapse() {
+  cancelCollapse();
+  collapseTimer = setTimeout(() => {
+    collapseTimer = null;
+    collapse();
+  }, COLLAPSE_AFTER_MS);
+}
 
 function setState(cls, status) {
   pill.className = cls || "";
@@ -43,9 +134,12 @@ function showPreview(text) {
 
 async function startRecording() {
   if (isRecording || busy) return;
+  cancelCollapse();
+  await expand();
   try {
     await invoke("start_recording");
     isRecording = true;
+    if (settings.sound_enabled !== false) playStart();
     previewEl.textContent = "";
     copyBtn.hidden = true;
     setState("recording");
@@ -53,6 +147,7 @@ async function startRecording() {
   } catch (err) {
     setState("", `Error: ${err}`);
     console.error(err);
+    scheduleCollapse();
   }
 }
 
@@ -60,6 +155,7 @@ async function stopRecording() {
   if (!isRecording || busy) return;
   isRecording = false;
   busy = true;
+  if (settings.sound_enabled !== false) playStop();
   stopTimer();
 
   try {
@@ -108,6 +204,7 @@ async function stopRecording() {
     console.error(err);
   } finally {
     busy = false;
+    scheduleCollapse();
   }
 }
 
@@ -116,7 +213,50 @@ function toggle() {
   else startRecording();
 }
 
-mic.addEventListener("click", toggle);
+// Expanded, the mic is an ordinary button and the pill around it is the drag region.
+// Collapsed, the dot is both — and they conflict: data-tauri-drag-region starts a
+// native drag on mousedown and swallows the click, so the dot cannot be a drag region
+// and a button at once. Decide from the gesture instead: move the pointer and it
+// drags, press without moving and it starts dictation.
+const DRAG_THRESHOLD_PX = 3;
+
+mic.addEventListener("click", () => {
+  if (collapsed) return; // handled by the gesture logic below
+  toggle();
+});
+
+mic.addEventListener("mousedown", (e) => {
+  if (!collapsed || e.button !== 0) return;
+  const from = { x: e.screenX, y: e.screenY };
+  let dragged = false;
+
+  const onMove = (ev) => {
+    if (dragged) return;
+    const moved =
+      Math.abs(ev.screenX - from.x) > DRAG_THRESHOLD_PX ||
+      Math.abs(ev.screenY - from.y) > DRAG_THRESHOLD_PX;
+    if (!moved) return;
+    dragged = true;
+    done();
+    // Hands the gesture to the window server; no mouseup reaches us afterwards.
+    getCurrentWindow()
+      .startDragging()
+      .catch((err) => uiLog("error", `startDragging failed: ${err}`));
+  };
+
+  const onUp = () => {
+    done();
+    if (!dragged) toggle();
+  };
+
+  function done() {
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+  }
+
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+});
 
 copyBtn.addEventListener("click", async () => {
   if (!lastResult) return;
@@ -147,9 +287,18 @@ listen("stop-recording", () => {
 // Any dictation completing (e.g. initiated from the Hub) updates the preview.
 listen("dictation-complete", (e) => {
   if (busy) return; // our own run already handled the UI
+  expand();
   setState("done", "Done ✓");
   showPreview(e.payload);
+  scheduleCollapse();
 });
+
+listen("settings-changed", refreshSettings);
+
+// Start collapsed-after-idle like any other idle moment, and read settings once so
+// the first dictation does not have to wait for them.
+refreshSettings();
+scheduleCollapse();
 
 // --- Position persistence: debounce window moves, save the logical position. ---
 //

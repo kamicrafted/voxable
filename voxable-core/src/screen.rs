@@ -82,6 +82,36 @@ pub fn resolve_position(
     (bottom_center(primary, width, height, margin), false)
 }
 
+/// Nudge a window fully onto `monitors` if it hangs off an edge, keeping it as close
+/// to where it was as possible.
+///
+/// The Flow Bar needs this because it grows to the right when it expands from the
+/// collapsed dot: a dot parked near the right edge would otherwise expand off-screen.
+/// Only the monitor the window most overlaps is considered, so a window on a secondary
+/// display is clamped to that display rather than yanked to the primary.
+pub fn clamp_to_monitor(window: &Rect, monitors: &[Rect]) -> (f64, f64) {
+    let Some(best) = monitors
+        .iter()
+        .max_by(|a, b| {
+            window
+                .overlap_area(a)
+                .partial_cmp(&window.overlap_area(b))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .copied()
+    else {
+        return (window.x, window.y);
+    };
+
+    // A window larger than the display pins to its origin rather than going negative.
+    let max_x = (best.right() - window.width).max(best.x);
+    let max_y = (best.bottom() - window.height).max(best.y);
+    (
+        window.x.clamp(best.x, max_x),
+        window.y.clamp(best.y, max_y),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -161,6 +191,44 @@ mod tests {
         let (pos, fell_back) = resolve_position(Some((-1200.0, -100.0)), &monitors, &primary, W, H, MARGIN);
         assert!(!fell_back);
         assert_eq!(pos, (-1200.0, -100.0));
+    }
+
+    #[test]
+    fn a_window_already_inside_is_left_alone() {
+        let (monitors, _) = dual();
+        let w = Rect::new(600.0, 800.0, W, H);
+        assert_eq!(clamp_to_monitor(&w, &monitors), (600.0, 800.0));
+    }
+
+    #[test]
+    fn expanding_near_the_right_edge_nudges_left() {
+        // The dot sits at x=1490; expanded to 296 wide it would reach 1786 on a
+        // 1512-wide display, so it slides back to 1512 - 296.
+        let (monitors, _) = dual();
+        let w = Rect::new(1490.0, 800.0, 296.0, 60.0);
+        assert_eq!(clamp_to_monitor(&w, &monitors), (1216.0, 800.0));
+    }
+
+    #[test]
+    fn clamping_stays_on_the_display_the_window_is_on() {
+        // On the Dell (above the primary), clamping must not pull it to the primary.
+        let (monitors, _) = dual();
+        let w = Rect::new(5000.0, -700.0, 296.0, 60.0);
+        let (x, y) = clamp_to_monitor(&w, &monitors);
+        assert_eq!((x, y), (4824.0, -700.0));
+    }
+
+    #[test]
+    fn a_window_wider_than_the_display_pins_to_the_origin() {
+        let primary = Rect::new(0.0, 0.0, 200.0, 200.0);
+        let w = Rect::new(50.0, 50.0, 400.0, 60.0);
+        assert_eq!(clamp_to_monitor(&w, &[primary]), (0.0, 50.0));
+    }
+
+    #[test]
+    fn no_monitors_leaves_the_position_unchanged() {
+        let w = Rect::new(10.0, 20.0, W, H);
+        assert_eq!(clamp_to_monitor(&w, &[]), (10.0, 20.0));
     }
 
     #[test]

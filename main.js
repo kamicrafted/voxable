@@ -6,6 +6,7 @@ import {
   hotkeyFromEvent,
   renderHotkey,
 } from "./hotkeys.js";
+import { playBeep } from "./sounds.js";
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
@@ -125,30 +126,6 @@ listen("dictation-complete", (e) => {
   showOutput(e.payload);
   setStatus("done", "Done");
 });
-
-// --- Sound ---
-
-let audioCtx = null;
-function ensureCtx() {
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  return audioCtx;
-}
-function playBeep() {
-  try {
-    const ctx = ensureCtx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.frequency.value = 880;
-    gain.gain.value = 0.1;
-    osc.start();
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
-    osc.stop(ctx.currentTime + 0.15);
-  } catch {
-    /* ignore */
-  }
-}
 
 // --- Settings ---
 
