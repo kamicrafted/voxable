@@ -382,14 +382,11 @@ fn show_hub(app: &AppHandle) {
                 log::error!("hub set_focus() failed: {e}");
             }
             // macOS: an accessory/background app cannot raise a window without also
-            // activating the process.
+            // activating the process. `AppHandle::show()` is macOS-only; on Windows and
+            // Linux `window.set_focus()` above already brings the window to the foreground
+            // (Tauri maps it to SetForegroundWindow on Windows), so no app-level show exists
+            // or is needed there.
             #[cfg(target_os = "macos")]
-            if let Err(e) = app.show() {
-                log::error!("app show() failed: {e}");
-            }
-            // Windows: a background app (no taskbar entry) needs the process
-            // activated before a window can be brought to the foreground.
-            #[cfg(windows)]
             if let Err(e) = app.show() {
                 log::error!("app show() failed: {e}");
             }
