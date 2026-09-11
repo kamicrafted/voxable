@@ -19,12 +19,10 @@ Press a hotkey, speak, and polished text is typed straight into whatever field y
 | Platform | Download | Notes |
 |---|---|---|
 | **macOS** (Apple Silicon) | [**Voxable_0.5.0_aarch64.dmg**](https://github.com/kamicrafted/voxable/releases/download/v0.5.0/Voxable_0.5.0_aarch64.dmg) | Metal-accelerated. macOS 11+. Apple Silicon only — no Intel build. |
-| **Windows** (any x64) | [**Voxable_0.2.0_x64_cpu-setup.exe**](https://github.com/kamicrafted/voxable/releases/download/v0.2.0/Voxable_0.2.0_x64_cpu-setup.exe) · [`.msi`](https://github.com/kamicrafted/voxable/releases/download/v0.2.0/Voxable_0.2.0_x64_cpu_en-US.msi) | ~3 MB. Runs anywhere, no GPU needed. **Start here.** |
-| **Windows** (NVIDIA GPU) | [**Voxable_0.2.0_x64_cuda-setup.exe**](https://github.com/kamicrafted/voxable/releases/download/v0.2.0/Voxable_0.2.0_x64_cuda-setup.exe) | ~380 MB. Faster transcription and `large-v3`. Bundles the CUDA runtime — no toolkit needed, works on RTX 20xx–50xx. |
+| **Windows** (any x64) | [**Voxable_0.5.0_x64_cpu-setup.exe**](https://github.com/kamicrafted/voxable/releases/download/v0.5.0-windows/Voxable_0.5.0_x64_cpu-setup.exe) · [`.msi`](https://github.com/kamicrafted/voxable/releases/download/v0.5.0-windows/Voxable_0.5.0_x64_cpu_en-US.msi) | ~3 MB. Runs anywhere, no GPU needed. **Start here.** |
+| **Windows** (NVIDIA GPU) | [**Voxable_0.5.0_x64_cuda-setup.exe**](https://github.com/kamicrafted/voxable/releases/download/v0.5.0-windows/Voxable_0.5.0_x64_cuda-setup.exe) | ~380 MB. Faster transcription and `large-v3`. Bundles the CUDA runtime — no toolkit needed, works on RTX 20xx–50xx. |
 
-The Windows installers are still at **v0.2.0**: the macOS releases since then are largely
-platform-specific, and the Windows build has not been rebuilt on top of them yet. Every version lives on the
-[releases page](https://github.com/kamicrafted/voxable/releases).
+Every version lives on the [releases page](https://github.com/kamicrafted/voxable/releases).
 
 **Neither build is notarized or signed with a paid certificate**, so the OS will object the first time:
 
