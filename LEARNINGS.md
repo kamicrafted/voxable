@@ -111,8 +111,10 @@ detail lives in `Docs/voxable/` (e.g. `wispr-flow-ui-research.md`, `design.md`) 
 - **`wait_idle()` waited on a flag its own caller had just set**, so it returned immediately every time and `stop()` could return with the `cpal` stream still installed; the next `start()` then built a second stream on the same device. Real defect, fixed — but it was *not* the cause of the truncation, and fixing it first cost a cycle. A flag that proves an event happened must be written by whoever performs it, not by whoever requested it.
 
 
-## Process lessons (from the V3 review)
-- **`#[serde(default)]` cuts both ways:** great for migrations, but a "save settings" that sends only a *subset* silently resets omitted fields to defaults → data loss. Send the full object or merge server-side.
-- **In-memory mutation ≠ persistence:** CRUD commands that edit `state.settings` must also write to disk.
-- **Trace data flow per feature:** history "Play audio" was fully wired in the UI but the backend saved empty audio + `duration_ms:0` — a dead flagship feature. One data-flow line per feature catches these gaps.
+## Process lessons
+> The general process rules from the V3 review — partial-write clobbers (`#[serde(default)]`),
+> in-memory mutation ≠ persistence, trace data flow per feature — are now standing rules in
+> `~/.omp/agent/AGENTS.md` (§Planning rule 5, §Reporting rule 3). Not repeated here. Voxable
+> hit all three: history "Play audio" saved empty audio + `duration_ms:0` (dead feature), and a
+> subset "save settings" reset omitted fields.
 - **Push-to-talk over a global shortcut is unreliable** (release events for a modifier chord). Default to hands-free (toggle); spike push-to-talk before committing. **On macOS this no longer applies:** the Fn CGEventTap already receives both the press and the release (`macos.rs` fires only on the transition into "pressed"), so hold-to-talk is available there whenever we want it. Still unimplemented as of 2026-09-10 — `settings.mode` is stored and never read.
