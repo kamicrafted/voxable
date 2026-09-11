@@ -1,8 +1,8 @@
 # Voxable — Project State
 
-**Last updated:** 2026-09-11 (v0.5.0 Windows catch-up)
-**Version:** **0.5.0** (pulled from `main`; macOS shipped v0.5.0 on 2026-09-11). Windows installers were three releases behind (v0.2.0); this session brought the Windows build up to v0.5.0.
-**Status:** **Windows v0.5.0 catch-up complete.** All six fixes from the catch-up doc applied and `cargo check --target x86_64-pc-windows-msvc` passes clean. Ready for a Windows release build + manual QA.
+**Last updated:** 2026-09-11 (v0.5.0 Windows shipped)
+**Version:** **0.5.0** — Windows installers live at [v0.5.0-windows](https://github.com/kamicrafted/voxable/releases/tag/v0.5.0-windows). macOS v0.5.0 shipped 2026-09-11.
+**Status:** **Shipped.** All six Windows fixes + the `app.show()` compile fix (commit `e69f97f`) are in. Four assets uploaded, all README links return 200.
 
 ## Windows v0.5.0 catch-up (2026-09-11)
 
@@ -15,9 +15,9 @@ Pulled `main` (v0.2.0 → v0.5.0, 49 files, +4509/-522). Six fixes applied for W
 5. **Update check asset filter** — `update.rs` now matches `.nsis.zip` in addition to `.exe`/`.msi`, so Windows builds find their own release assets.
 6. **Flow Bar resize (center-preserving)** — `resize_flowbar` on non-macOS platforms adjusts `y` by `(old_h - new_h) / 2` before `set_size` so the pill grows about its vertical centre.
 
-**Verified:** `cargo check --target x86_64-pc-windows-msvc` clean (no warnings, no errors) — prior session, before the onboarding fix (JS-only, no Rust changes since).
+**Verified:** `cargo check --target x86_64-pc-windows-msvc` clean. Windows release build succeeded on the host after removing the macOS-only `app.show()` from the `#[cfg(windows)]` block (commit `e69f97f`).
 
-**Next step:** build the Windows release installer on the Windows host (`npm run tauri build`), then run the manual QA checklist from the catch-up doc.
+**Next step:** Manual QA on the Windows host (checklist at top). The one still-unverified item is the right-click context menu position (Hub-window popup may be mislocated). If QA finds a bug, that's a follow-up fix + a `.1`.
 
 ## v0.5.0 features (from macOS, now on Windows)
 
