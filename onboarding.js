@@ -1,7 +1,14 @@
 // First-launch permission screen.
 //
-// Permissions can be granted outside this window (System Settings), and macOS sends
-// no notification when they change, so the screen polls while it is open.
+// macOS: permissions can be granted outside this window (System Settings), and
+// macOS sends no notification when they change, so the screen polls while it is
+// open.
+//
+// Windows: there are no OS-level permission prompts to wait for — microphone
+// access is granted by the first `cpal` stream open, and auto-paste needs no
+// extra grant. The screen still shows so the user can set a hotkey and see
+// what the app does; it polls so the microphone status flips to "granted"
+// the moment the first recording attempt succeeds.
 
 import { invoke } from "@tauri-apps/api/core";
 

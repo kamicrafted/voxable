@@ -1,13 +1,40 @@
 # Voxable — Project State
 
-**Last updated:** 2026-09-10 (v0.4.0)
-**Version:** **0.2.0** (bumped from 0.1.0 — package.json, both `Cargo.toml`s, `tauri.conf.json`; build scripts read the version from package.json so installer filenames track it). V2 and V3 both shipped as 0.1.0, which caused an install mix-up — 0.2.0 disambiguates.
-**Status:** **V3 shipped as v0.2.0.** Code-complete + focus/paste + light redesign. All 11 lean-plan tasks done, plus two post-plan iterations from Dave: (1) **focus-preserving auto-paste** — Flow Bar is now non-activating (`WS_EX_NOACTIVATE`, no `set_focus`) so it never steals focus, and dictation auto-pastes into the active field via synthesized Ctrl+V (`paste_to_active` cmd + `app_context::send_ctrl_v`); (2) **light/modern Wispr-style redesign** of both Flow Bar (light pill, gradient mic, animated waveform, SVG icons, window bumped to 340×96 for shadow room) and Hub (light theme, toggle switches, gradient accents). `voxable-core` **VERIFIED (25 passed)**. `src-tauri` `cargo check` clean; **both CPU + CUDA release installers build** → named `Voxable_0.1.0_x64_cpu-*` / `_cuda-*` in `target/release/bundle/{nsis,msi}/`. Packaged app launches (both windows, no crash). Design verified visually in the browser (dev server).
-**Post-ship fixes (Dave testing):** (a) added `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]` — release exe was spawning a console terminal showing log output (the "floating terminal always on top"); (b) CUDA runtime DLLs: CUDA 13 puts `cublas64_13.dll`/`cublasLt64_13.dll`/`cudart64_13.dll` in `…\CUDA\v13.3\bin\x64\` (not on PATH) → "cublas64_13.dll not found" at startup. Fix: **shareable CUDA installer** now bundles the 3 DLLs next to the exe (Tauri resource map → exe dir) AND builds multi-arch (`CUDAARCHS="75;86;89;120"`, 20xx→50xx) → runs on any Windows NVIDIA machine, no toolkit/PATH. Verified: exe launches with CUDA removed from PATH, no error. CUDA installer ~400MB (cublasLt is 463MB); CPU installer stays ~3MB. Build scripts: `scripts/build-installers.ps1`, `scripts/build-cuda-shareable.ps1`; CUDA merge config `src-tauri/tauri.cuda.conf.json` (+ staged DLLs in `src-tauri/cuda-runtime/`, gitignored).
-**Published (2026-09-09):** confirmed working by Dave. **Public** GitHub repo → https://github.com/kamicrafted/voxable (branch `main`, MIT license, topics set). Releases: `v0.1.0` (initial) and **`v0.2.0`** (latest) with Windows installers attached. README has per-platform install + Flow Bar/Hub screenshots (`docs/screenshots/`). `.gitignore`/`.gitattributes` keep `target/`, `node_modules/`, `dist/`, `src-tauri/cuda-runtime/`, and `installers/` out of the repo. Auth: `gh` (account `kamicrafted`) + HTTPS remote via `gh auth setup-git`.
-**`installers/` (local, gitignored) = source of truth for Windows installers**, mirrored from `target/release/bundle/` by `build-installers.ps1`. It previously held STALE V2 (Sep-07) builds → Dave installed those and got the old UI + console; now auto-refreshed on each build. **MSI gotcha:** the WiX bundler harvests the binary dir, so stray CUDA DLLs in `target/release/` bloat a later CPU `.msi` (4MB→380MB) — the script now purges `target/release/*.dll` before the CPU build.
+**Last updated:** 2026-09-11 (v0.5.0 Windows catch-up)
+**Version:** **0.5.0** (pulled from `main`; macOS shipped v0.5.0 on 2026-09-11). Windows installers were three releases behind (v0.2.0); this session brought the Windows build up to v0.5.0.
+**Status:** **Windows v0.5.0 catch-up complete.** All six fixes from the catch-up doc applied and `cargo check --target x86_64-pc-windows-msvc` passes clean. Ready for a Windows release build + manual QA.
 
-**⚠ KNOWN ISSUE (2026-09-09):** the **Hub window isn't working** (symptom not yet captured — CPU app otherwise confirmed working by Dave: dictation + Flow Bar + no console). Dave is fixing the Hub **on the macOS side first**, then porting the fix back to Windows. Don't independently rework the Hub here until that lands — pick it up from his Mac changes.
+## Windows v0.5.0 catch-up (2026-09-11)
+
+Pulled `main` (v0.2.0 → v0.5.0, 49 files, +4509/-522). Six fixes applied for Windows:
+
+1. **Flow Bar vibrancy (acrylic) + CSS fallback** — `set_effects(Effect::Acrylic)` in setup (cfg(windows)); CSS `backdrop-filter: blur()` as a no-op fallback for when acrylic is unavailable.
+2. **Onboarding permission screen** — `permission_status` returns `accessibility: true` + `microphone: "granted"` on Windows (no macOS-style prompts needed); onboarding screen polls and completes.
+3. **Flow Bar right-click context menu** — `show_flowbar_menu` uses the Hub window as the popup host on Windows (Flow Bar is `WS_EX_NOACTIVATE` so `popup_menu` on it would fail).
+4. **Hub window show/focus** — tray "Open Voxable" and update-check both call `center_on_active_monitor` + `show()` + `set_focus()` on Windows.
+5. **Update check asset filter** — `update.rs` now matches `.nsis.zip` and `.msi` in addition to `.dmg`/`.app.tar.gz`, so Windows builds find their own release assets.
+6. **Flow Bar resize (center-preserving)** — `resize_flowbar` on non-macOS platforms adjusts `y` by `(old_h - new_h) / 2` before `set_size` so the pill grows about its vertical centre.
+
+**Verified:** `cargo check --target x86_64-pc-windows-msvc` clean (no warnings, no errors).
+
+**Next step:** build the Windows release installer on the Windows host (`npm run tauri build`), then run the manual QA checklist from the catch-up doc.
+
+## v0.5.0 features (from macOS, now on Windows)
+
+- Flow Bar rebuilt from Figma (289×36 pill, 36×36 dot, four states, 220ms animator-proxy resize)
+- Dictionary primes Whisper's decoder (`set_initial_prompt`) + corrects transcript literally
+- Update check on launch + tray, announcing a version once
+- Hide-when-idle Flow Bar setting
+- Hub switches no longer squeeze; history playback works; webview errors logged
+- VAD against clip's own noise floor; <250ms clips not transcribed
+- Push-to-talk (hold hotkey >300ms) on macOS; hands-free toggle default
+
+## Prior releases (summary)
+
+- **v0.4.0** (2026-09-10, macOS): Flow Bar rework, VAD fix, cpal teardown fix, `log_from_ui`
+- **v0.3.0** (2026-09-10, macOS): push-to-talk, transparency, positioning, permissions
+- **v0.2.0** (2026-09-09): V3 shipped — two-window system, focus-preserving auto-paste, light redesign
+- **v0.1.0** (2026-09-09): initial V3 release
 
 **Mac build (2026-09-09):** builds and runs on Apple Silicon (`Voxable.app` arm64 + Metal-linked, `Voxable_0.1.0_aarch64.dmg`). Three macOS-only fixes landed: `.cargo/config.toml` pins `MACOSX_DEPLOYMENT_TARGET=11.0` (ggml needs 10.15+ for `std::filesystem`); `src-tauri/build.rs` links `libclang_rt.osx.a` for the Metal backend's Objective-C `@available`; and `scripts/build-mac.sh` builds `--bundles app` and makes the DMG with `hdiutil create -format UDZO`, because Tauri's `bundle_dmg.sh` needs Finder automation plus `hdiutil convert` and neither works on a Kandji-managed Mac. Details in BUILD.md + LEARNINGS.md.
 
@@ -110,7 +137,7 @@ and a Hub window (control panel) for settings, dictionary, snippets, and history
 ## Plan
 - **Spec:** `Docs/voxable/superpowers/specs/2026-09-07-voxable-v3-design.md`
 - **Lean plan (active):** `Docs/voxable/superpowers/plans/2026-09-08-voxable-v3-implementation-lean.md`
-  (11 tasks; Tasks 1–3, 5 + VAD done in `voxable-core` — unverified; Tasks 4, 6–11 are Claude Code's)
+  (11 tasks — **all done**: Tasks 1–3, 5 + VAD in `voxable-core` (25 tests passed, verified on Windows host); Tasks 4, 6–11 in `src-tauri` (Claude Code). Plus the two post-plan iterations above.)
 
 ## Build status
 - Workspace: root `Cargo.toml` (members `src-tauri` + `voxable-core`; `[profile.release]` lives here, NOT in members).
@@ -124,4 +151,4 @@ and a Hub window (control panel) for settings, dictionary, snippets, and history
 - Audio resampler is linear interpolation (good for speech, not music)
 - No auto-start on boot (user must launch app)
 - Win32 app detection is Windows-only (returns None on Linux/macOS)
-- `mic_device` and `sound_enabled` stored but not wired (follow-up spike)
+- Auto-paste is Windows-only (`SendInput`); Mac/Linux would need an equivalent (e.g. `enigo`)

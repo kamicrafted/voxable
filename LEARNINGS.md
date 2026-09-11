@@ -21,10 +21,16 @@ detail lives in `Docs/voxable/` (e.g. `wispr-flow-ui-research.md`, `design.md`) 
 - **Transparent Flow Bar:** window `"transparent": true` + `"decorations": false`; paint the pill background in CSS (`html,body { background: transparent }`). The window must be LARGER than the visible pill (inset the pill with `position:absolute; inset:18px 22px`) or the pill's box-shadow gets clipped at the window edge.
 - **Focus-preserving dictation (the whole point of the pill):** the Flow Bar must NOT take focus, or it steals it from the user's text field. (1) In the hotkey handler / show paths, `show()` but never `set_focus()` on the Flow Bar. (2) On Windows, add `WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW` to its HWND via `GetWindowLongPtrW`/`SetWindowLongPtrW(GWL_EXSTYLE)` so even a mouse click on it won't move focus. Get the HWND with `webview_window.hwnd()` (cfg(windows)-only) and pass `h.0 as isize` across the fn boundary (avoids `windows`-crate version-identity issues). Then **auto-paste** = `copy_to_clipboard` → `SendInput` Ctrl+V (VK_CONTROL/VK_V down+up) into the still-focused field. Needs windows feature `Win32_UI_Input_KeyboardAndMouse`; a ~60 ms JS delay after the clipboard write before pasting is enough.
 - **`[hidden]` vs `display`:** an id rule like `#copy { display: grid }` OVERRIDES the UA `[hidden]{display:none}` (higher specificity), so `el.hidden = true` won't hide it. Add an explicit `[hidden]{display:none!important}` to any CSS that sets `display` on elements you also toggle via the `hidden` attribute.
+- **`popup_menu` on a `WS_EX_NOACTIVATE` window fails or steals focus.** On Windows the Flow Bar is non-activating, so the right-click context menu must be shown on a different window (the Hub, which is invisible and never activated). Build the `Menu` once, call `hub_window.popup_menu(&menu)`.
 
 ## Build environment (Windows host)
 - **`cmake` and `cargo` must be on the shell PATH for a release build.** `cargo check` can pass while `npm run tauri build` fails at `whisper-rs-sys` with "is `cmake` not installed?" — because `check` reuses the cached *debug* whisper.cpp, but the *release* profile recompiles whisper.cpp and needs cmake. Add both before building:
   `$env:PATH = "C:\Users\hello\.cargo\bin;C:\Program Files\CMake\bin;$env:PATH"` (and `LIBCLANG_PATH=C:\Program Files\LLVM\bin`). cmake lives at `C:\Program Files\CMake\bin`.
+
+## Publishing / repo
+- **GitHub auth from the Windows host:** `gh auth login` (account `kamicrafted`) + `gh auth setup-git` → HTTPS remotes work without a token in the URL. Voxable repo: `https://github.com/kamicrafted/voxable` (MIT).
+- **Ship a version bump when the UI changes materially:** V2 and V3 both shipped as 0.1.0 → install mix-up (stale 0.1.0 installers in `installers/` got installed over the new one). Bumped to 0.2.0; build scripts read the version from `package.json` so installer filenames track it.
+- **`installers/` is gitignored and mirrors `target/release/bundle/`** via `build-installers.ps1` — it can hold STALE builds; the script now auto-refreshes it each build (stale V2 installers caused the mix-up above).
 
 ## whisper-rs 0.16
 - `WhisperContextParameters` builder returns `&mut` — build as `let mut p = …::new(); p.use_gpu(x);` (don't chain).

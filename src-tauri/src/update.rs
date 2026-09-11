@@ -50,7 +50,11 @@ fn has_asset_for_this_platform(assets: &[Asset]) -> bool {
         if cfg!(target_os = "macos") {
             name.ends_with(".dmg") || name.ends_with(".app.tar.gz")
         } else if cfg!(windows) {
-            name.ends_with(".exe") || name.ends_with(".msi")
+            // Tauri v2 NSIS builds are named `*.nsis.zip` (a zip containing the
+            // installer .exe). Plain .exe / .msi cover older or hand-built assets.
+            name.ends_with(".exe")
+                || name.ends_with(".msi")
+                || name.ends_with(".nsis.zip")
         } else {
             name.ends_with(".appimage") || name.ends_with(".deb")
         }

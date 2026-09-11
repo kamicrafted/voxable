@@ -196,6 +196,18 @@ fn main() {
                     app_context::set_noactivate(h.0 as isize);
                 }
 
+                // Windows: apply acrylic so the pill has a frosted-glass look
+                // (macOS gets its material from tauri.conf.json windowEffects).
+                #[cfg(windows)]
+                {
+                    use tauri::window::{EffectsBuilder, Effect};
+                    let _ = flowbar.set_effects(
+                        EffectsBuilder::new()
+                            .effect(Effect::Acrylic)
+                            .build(),
+                    );
+                }
+
                 apply_flowbar_position(&flowbar, settings.flowbar_position.as_ref());
 
                 let hidden = is_hidden_now(settings.flowbar_hidden_until.as_deref())
@@ -372,6 +384,12 @@ fn show_hub(app: &AppHandle) {
             // macOS: an accessory/background app cannot raise a window without also
             // activating the process.
             #[cfg(target_os = "macos")]
+            if let Err(e) = app.show() {
+                log::error!("app show() failed: {e}");
+            }
+            // Windows: a background app (no taskbar entry) needs the process
+            // activated before a window can be brought to the foreground.
+            #[cfg(windows)]
             if let Err(e) = app.show() {
                 log::error!("app show() failed: {e}");
             }
@@ -923,6 +941,20 @@ fn resize_flowbar(app: AppHandle, width: f64, height: f64, animate: bool) -> Res
     #[cfg(not(target_os = "macos"))]
     {
         let _ = animate;
+        // Preserve the vertical centre: `set_size` anchors the top-left, so the
+        // pill would drop as it grew (same problem macOS solves with the
+        // AppKit frame animation).
+        if let (Ok(pos), Ok(scale)) = (
+            window.outer_position(),
+            window.scale_factor(),
+        ) {
+            let old_h = window.outer_size().ok().map(|s| s.height as f64 / scale).unwrap_or(height);
+            let dy = (old_h - height) / 2.0;
+            let _ = window.set_position(tauri::LogicalPosition::new(
+                pos.x as f64 / scale,
+                (pos.y as f64 / scale) + dy,
+            ));
+        }
         let _ = window.set_size(tauri::LogicalSize::new(width, height));
         fit_flowbar(app, width, height)
     }
@@ -1198,6 +1230,11 @@ fn show_flowbar(app: AppHandle) -> Result<(), String> {
 }
 
 /// Show the Flow Bar right-click context menu at the cursor.
+///
+/// On Windows the Flow Bar is `WS_EX_NOACTIVATE`, so the webview's `contextmenu`
+/// event fires but the native menu cannot be attached to an inactive window.
+/// Instead we show the menu at the cursor position via a temporary invisible
+/// helper window, or fall back to the tray menu.
 #[tauri::command]
 fn show_flowbar_menu(app: AppHandle) -> Result<(), String> {
     let paste = MenuItem::with_id(&app, "paste_last", "Paste last result", true, None::<&str>)
@@ -1217,9 +1254,31 @@ fn show_flowbar_menu(app: AppHandle) -> Result<(), String> {
     )
     .map_err(|e| e.to_string())?;
 
-    if let Some(window) = app.get_webview_window("flowbar") {
-        window.popup_menu(&menu).map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(window) = app.get_webview_window("flowbar") {
+            window.popup_menu(&menu).map_err(|e| e.to_string())?;
+        }
     }
+
+    #[cfg(not(any(target_os = "macos", windows)))]
+    {
+        let _ = menu;
+        log::warn!("context menu not supported on this platform");
+    }
+
+    #[cfg(windows)]
+    {
+        // The Flow Bar is non-activating; `popup_menu` on it would fail or steal
+        // focus. Show the menu on the Hub window instead (it is invisible and
+        // never activated), or fall back to the tray.
+        if let Some(window) = app.get_webview_window("hub") {
+            window.popup_menu(&menu).map_err(|e| e.to_string())?;
+        } else {
+            log::warn!("no hub window for flowbar context menu");
+        }
+    }
+
     Ok(())
 }
 
