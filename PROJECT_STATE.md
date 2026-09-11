@@ -8,14 +8,14 @@
 
 Pulled `main` (v0.2.0 → v0.5.0, 49 files, +4509/-522). Six fixes applied for Windows:
 
-1. **Flow Bar vibrancy (acrylic) + CSS fallback** — `set_effects(Effect::Acrylic)` in setup (cfg(windows)); CSS `backdrop-filter: blur()` as a no-op fallback for when acrylic is unavailable.
-2. **Onboarding permission screen** — `permission_status` returns `accessibility: true` + `microphone: "granted"` on Windows (no macOS-style prompts needed); onboarding screen polls and completes.
+1. **Flow Bar vibrancy (acrylic)** — `set_effects(Effect::Acrylic)` in setup (cfg(windows)). CSS `backdrop-filter: blur()` fallback already existed in `flowbar.css`.
+2. **Onboarding permission screen** — `permission_status` returns `accessibility: true` + `microphone: "granted"` on Windows (no macOS-style prompts needed). Onboarding screen shows so the user can set a hotkey, but does NOT auto-dismiss on Windows (guarded by `IS_MACOS`); user clicks "Start using Voxable" to finish. Polling is skipped on Windows.
 3. **Flow Bar right-click context menu** — `show_flowbar_menu` uses the Hub window as the popup host on Windows (Flow Bar is `WS_EX_NOACTIVATE` so `popup_menu` on it would fail).
-4. **Hub window show/focus** — tray "Open Voxable" and update-check both call `center_on_active_monitor` + `show()` + `set_focus()` on Windows.
-5. **Update check asset filter** — `update.rs` now matches `.nsis.zip` and `.msi` in addition to `.dmg`/`.app.tar.gz`, so Windows builds find their own release assets.
+4. **Hub window show/focus** — `show_hub` calls `app.show()` after `window.show()`/`set_focus()` on Windows (background app needs process activation to bring a window to the foreground).
+5. **Update check asset filter** — `update.rs` now matches `.nsis.zip` in addition to `.exe`/`.msi`, so Windows builds find their own release assets.
 6. **Flow Bar resize (center-preserving)** — `resize_flowbar` on non-macOS platforms adjusts `y` by `(old_h - new_h) / 2` before `set_size` so the pill grows about its vertical centre.
 
-**Verified:** `cargo check --target x86_64-pc-windows-msvc` clean (no warnings, no errors).
+**Verified:** `cargo check --target x86_64-pc-windows-msvc` clean (no warnings, no errors) — prior session, before the onboarding fix (JS-only, no Rust changes since).
 
 **Next step:** build the Windows release installer on the Windows host (`npm run tauri build`), then run the manual QA checklist from the catch-up doc.
 

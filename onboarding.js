@@ -2,15 +2,17 @@
 //
 // macOS: permissions can be granted outside this window (System Settings), and
 // macOS sends no notification when they change, so the screen polls while it is
-// open.
+// open and auto-dismisses once both are granted.
 //
-// Windows: there are no OS-level permission prompts to wait for — microphone
-// access is granted by the first `cpal` stream open, and auto-paste needs no
-// extra grant. The screen still shows so the user can set a hotkey and see
-// what the app does; it polls so the microphone status flips to "granted"
-// the moment the first recording attempt succeeds.
+// Windows: there are no OS-level permission prompts — microphone access is
+// granted by the first `cpal` stream open, and auto-paste needs no extra grant.
+// The screen still shows so the user can set a hotkey and see what the app
+// does, but it does NOT auto-dismiss: the user clicks "Start using Voxable"
+// when ready. Polling is skipped since there is nothing to wait for.
 
 import { invoke } from "@tauri-apps/api/core";
+
+const IS_MACOS = navigator.platform.toLowerCase().includes("mac");
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
@@ -62,10 +64,11 @@ async function refresh() {
     ? "Start using Voxable"
     : "Continue without microphone";
 
-  // Both granted means there is nothing left to do on this screen, so finish on
-  // its own rather than making the user hunt for the button. The pause is so the
-  // confirmation is readable, not decorative.
-  if (ready && status.accessibility && !finishing) {
+  // macOS only: both granted means there is nothing left to do on this screen,
+  // so finish on its own rather than making the user hunt for the button.
+  // Windows always shows "granted" (no permission prompts), so auto-dismissing
+  // would flash the screen for 1.6 s and close it.
+  if (ready && status.accessibility && !finishing && IS_MACOS) {
     finishing = true;
     $("#allset").hidden = false;
     $$(".ob-footer button").forEach((btn) => (btn.disabled = true));
@@ -95,5 +98,7 @@ $$("[data-action]").forEach((btn) => {
 });
 
 refresh();
-setInterval(refresh, 1500);
+if (IS_MACOS) {
+  setInterval(refresh, 1500);
+}
 window.addEventListener("focus", refresh);
