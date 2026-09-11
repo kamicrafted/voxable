@@ -635,7 +635,7 @@ fn stop_recording(
 
 /// Transcribe the most recently captured audio; store the raw text in state.
 #[tauri::command]
-async fn transcribe(state: State<'_, AppState>) -> Result<String, String> {
+async fn transcribe(app: AppHandle, state: State<'_, AppState>) -> Result<String, String> {
     let t_total = std::time::Instant::now();
     let audio = { state.last_audio.lock().clone() };
     if audio.is_empty() {
@@ -654,8 +654,25 @@ async fn transcribe(state: State<'_, AppState>) -> Result<String, String> {
         )
     };
 
-    // Ensure model is downloaded (no locks held across this await).
-    let path = whisper::ensure_model(&model_name).await?;
+    // Ensure model is downloaded (no locks held across this await). The first
+    // dictation after selecting a large model (medium/large) downloads hundreds of
+    // MB to over a GB here — report progress to the Flow Bar so it shows
+    // "Downloading model … %" instead of a silent "Transcribing" that looks hung.
+    let progress_app = app.clone();
+    let progress_model = model_name.clone();
+    let path = whisper::ensure_model(&model_name, move |done, total| {
+        let pct = if total > 0 {
+            ((done as f64 / total as f64) * 100.0).round() as u32
+        } else {
+            0
+        };
+        let _ = progress_app.emit_to(
+            "flowbar",
+            "model-download",
+            serde_json::json!({ "model": progress_model, "pct": pct }),
+        );
+    })
+    .await?;
 
     // Load model into the engine if needed (brief lock, no await inside).
     {

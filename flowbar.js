@@ -329,6 +329,19 @@ window.addEventListener("contextmenu", (e) => {
 // The Rust global shortcut is the sole hotkey owner; it emits this to us.
 listen("toggle-recording", toggle);
 
+// The first dictation with a newly-selected model downloads it (medium/large is
+// hundreds of MB to over a GB). The transcribe call blocks on that download, so
+// show progress instead of a "Transcribing" label that looks stuck.
+listen("model-download", (e) => {
+  if (!busy) return; // only while a dictation is in flight
+  const pct = e.payload?.pct ?? 0;
+  setState(
+    "processing",
+    pct > 0 ? `Downloading model ${pct}%` : "Downloading model…",
+    ""
+  );
+});
+
 // Push-to-talk: the hotkey was held rather than tapped, so releasing it ends
 // dictation. stopRecording() guards on its own state, so this is safely ignored if
 // we are not recording or are already transcribing.

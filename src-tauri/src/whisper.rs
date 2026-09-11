@@ -8,7 +8,15 @@ use whisper_rs::{
 
 /// Ensure the model file exists on disk, downloading it if necessary.
 /// Standalone (not a method) so it can be awaited without holding the engine lock.
-pub async fn ensure_model(model_name: &str) -> Result<PathBuf, String> {
+///
+/// `on_progress(downloaded, total)` is called as bytes arrive (total is 0 if the
+/// server sends no Content-Length) so a caller can show download progress — a large
+/// model (medium ~769MB, large-v3 ~1.5GB) otherwise blocks the transcribe call for
+/// a long time with no feedback, which reads as the app being stuck.
+pub async fn ensure_model<F: Fn(u64, u64)>(
+    model_name: &str,
+    on_progress: F,
+) -> Result<PathBuf, String> {
     let path = model_path(model_name);
     if path.exists() {
         return Ok(path);
@@ -35,7 +43,7 @@ pub async fn ensure_model(model_name: &str) -> Result<PathBuf, String> {
     let tmp_path = path.with_extension("downloading");
 
     let client = reqwest::Client::new();
-    let resp = client
+    let mut resp = client
         .get(&url)
         .send()
         .await
@@ -45,13 +53,42 @@ pub async fn ensure_model(model_name: &str) -> Result<PathBuf, String> {
         return Err(format!("Model download returned HTTP {}", resp.status()));
     }
 
-    let bytes = resp
-        .bytes()
+    // Stream to a temp file rather than buffering the whole model in memory, and
+    // report progress as chunks arrive. `chunk()` needs no extra reqwest feature.
+    let total = resp.content_length().unwrap_or(0);
+    let mut file = std::fs::File::create(&tmp_path)
+        .map_err(|e| format!("Failed to create model file: {}", e))?;
+    use std::io::Write;
+    let mut downloaded: u64 = 0;
+    let mut last_emit: u64 = 0;
+    on_progress(0, total);
+    while let Some(chunk) = resp
+        .chunk()
         .await
-        .map_err(|e| format!("Failed to read model bytes: {}", e))?;
+        .map_err(|e| format!("Download interrupted: {}", e))?
+    {
+        file.write_all(&chunk)
+            .map_err(|e| format!("Failed to write model file: {}", e))?;
+        downloaded += chunk.len() as u64;
+        // Throttle UI updates to ~every 4 MB.
+        if downloaded - last_emit >= 4_000_000 {
+            on_progress(downloaded, total);
+            last_emit = downloaded;
+        }
+    }
+    file.flush().map_err(|e| e.to_string())?;
+    drop(file);
 
-    std::fs::write(&tmp_path, &bytes)
-        .map_err(|e| format!("Failed to write model file: {}", e))?;
+    // Never cache a truncated download as a good model — that would fail to load on
+    // every future dictation. Drop the partial so the next attempt starts clean.
+    if total > 0 && downloaded < total {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(format!(
+            "Model download incomplete ({downloaded}/{total} bytes) — check your connection and try again"
+        ));
+    }
+
+    on_progress(downloaded, total);
     std::fs::rename(&tmp_path, &path)
         .map_err(|e| format!("Failed to finalize model file: {}", e))?;
 
