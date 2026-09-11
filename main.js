@@ -381,7 +381,7 @@ function startRecordingHotkey() {
   recording = true;
   $("#hotkey-record").classList.add("recording");
   $("#hotkey-status").textContent = IS_MAC
-    ? "Press the keys you want. Esc cancels. (fn is set with Reset to default.)"
+    ? "Press the keys you want. If nothing happens, macOS has claimed that combination — check System Settings → Keyboard → Keyboard Shortcuts. Esc cancels, fn is set with Reset to default."
     : "Press the keys you want. Esc cancels.";
   window.addEventListener("keydown", onHotkeyKeydown, true);
 }

@@ -118,6 +118,9 @@ pub fn request_microphone_access() {
     }
 }
 
+/// How long the Flow Bar takes to grow or shrink, in seconds.
+const RESIZE_DURATION: f64 = 0.22;
+
 /// Resize the Flow Bar window about its vertical centre, optionally animated.
 ///
 /// Two things `set_size` cannot do. It anchors the top-left, so a height change
@@ -131,8 +134,9 @@ pub fn request_microphone_access() {
 /// `ns_window` is the pointer from Tauri's `ns_window()`. Must run on the main
 /// thread; AppKit ignores frame changes from anywhere else.
 pub fn resize_about_center(ns_window: *mut std::ffi::c_void, width: f64, height: f64, animate: bool) {
+    use objc2::msg_send;
     use objc2::rc::Retained;
-    use objc2_app_kit::NSWindow;
+    use objc2_app_kit::{NSAnimationContext, NSWindow};
     use objc2_foundation::{NSPoint, NSRect, NSSize};
 
     if ns_window.is_null() {
@@ -162,17 +166,31 @@ pub fn resize_about_center(ns_window: *mut std::ffi::c_void, width: f64, height:
     }
 
     let new_frame = NSRect::new(NSPoint::new(x, y), NSSize::new(width, height));
-    // setFrame:display:animate: blocks for the length of the animation, so the
-    // elapsed time here says whether it actually animated or snapped.
-    let t = std::time::Instant::now();
-    unsafe { window.setFrame_display_animate(new_frame, true, animate) };
+
+    if !animate {
+        unsafe { window.setFrame_display(new_frame, true) };
+        return;
+    }
+
+    // `setFrame:display:animate:` picks its own duration from `animationResizeTime:`
+    // and ignores NSAnimationContext — it ran 306ms for this resize. The animator
+    // proxy is the one that honours an explicit duration, so the transition is timed
+    // rather than scaled to how much the frame changed.
+    unsafe {
+        NSAnimationContext::beginGrouping();
+        NSAnimationContext::currentContext().setDuration(RESIZE_DURATION);
+        // The proxy responds to the same selectors and applies them animated.
+        let animator: Retained<NSWindow> = msg_send![&*window, animator];
+        animator.setFrame_display(new_frame, true);
+        NSAnimationContext::endGrouping();
+    }
     log::info!(
-        "flowbar frame {}x{} -> {}x{} (animate={animate}) took {}ms",
+        "flowbar frame {}x{} -> {}x{} over {}ms",
         frame.size.width,
         frame.size.height,
         width,
         height,
-        t.elapsed().as_millis()
+        (RESIZE_DURATION * 1000.0) as u32
     );
 }
 
