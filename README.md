@@ -87,9 +87,9 @@ npm run tauri build            # CPU build (portable)
 
 Installer output: `src-tauri\target\release\bundle\` (`.msi` + NSIS `-setup.exe`). Installs to `%LOCALAPPDATA%\Voxable\`.
 
-**NVIDIA GPU (CUDA):** the CPU build already works; for GPU acceleration see the CUDA sections in [BUILD.md](BUILD.md). Two variants are scripted:
-- `scripts\build-installers.ps1` — CPU + a CUDA build tuned for *this* machine (`CUDAARCHS=native`).
-- `scripts\build-cuda-shareable.ps1` — a **self-contained, multi-GPU** CUDA installer (bundles the CUDA runtime DLLs; runs on any Windows machine with an NVIDIA driver — no toolkit/PATH needed). ~400 MB.
+**NVIDIA GPU (CUDA):** the CPU build already works; for GPU acceleration see the CUDA sections in [BUILD.md](BUILD.md). Two scripts:
+- `scripts\build-installers.ps1` — the **release build**: CPU (portable) **and** the self-contained, multi-GPU CUDA installer. This is what the published installers are built with.
+- `scripts\build-cuda-shareable.ps1` — just the CUDA half of the above (bundles the CUDA runtime DLLs; runs on any Windows machine with an NVIDIA driver — no toolkit/PATH needed, works on RTX 20xx–50xx). ~400 MB. `build-installers.ps1` calls this.
 
 > CUDA 13 keeps its runtime DLLs in `…\CUDA\vX.Y\bin\x64\` (not on PATH), so a plain CUDA build fails at launch with `cublas64_13.dll not found`. The shareable script bundles them; see BUILD.md.
 
