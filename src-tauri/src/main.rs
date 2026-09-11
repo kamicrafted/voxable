@@ -196,17 +196,14 @@ fn main() {
                     app_context::set_noactivate(h.0 as isize);
                 }
 
-                // Windows: apply acrylic so the pill has a frosted-glass look
-                // (macOS gets its material from tauri.conf.json windowEffects).
-                #[cfg(windows)]
-                {
-                    use tauri::window::{EffectsBuilder, Effect};
-                    let _ = flowbar.set_effects(
-                        EffectsBuilder::new()
-                            .effect(Effect::Acrylic)
-                            .build(),
-                    );
-                }
+                // Windows note: we deliberately do NOT apply a native acrylic/mica
+                // effect here. Those materials fill the whole window rectangle with
+                // Windows' own (~8px) corner radius, which cannot follow the Flow Bar's
+                // capsule — and when it collapses to a round dot the material shows as a
+                // rounded-rect box behind the circle. The Flow Bar is a transparent,
+                // borderless window and paints its own translucent capsule/dot in CSS
+                // (flowbar.css), so the shape is always exact. (macOS gets real vibrancy
+                // from tauri.conf.json windowEffects, whose rect is shaped to the window.)
 
                 apply_flowbar_position(&flowbar, settings.flowbar_position.as_ref());
 
