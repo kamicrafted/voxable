@@ -27,8 +27,11 @@ let elapsed = 0;
 // circle at 60x60. That means the vibrancy mask never has to be rebuilt on resize —
 // re-applying it was leaving the shape half-masked from the previous size, which
 // showed up as a pill with square ends or a dot with a flat edge.
-const EXPANDED = { w: 289, h: 44, radius: 22 };
-const COLLAPSED = { w: 36, h: 36, radius: 22 };
+// Same height in both states, so only the right edge moves and the icon never
+// shifts. One radius (half the shared height) means the vibrancy mask is never
+// rebuilt on resize.
+const EXPANDED = { w: 289, h: 36, radius: 18 };
+const COLLAPSED = { w: 36, h: 36, radius: 18 };
 const COLLAPSE_AFTER_MS = 1500;
 
 let collapsed = false;

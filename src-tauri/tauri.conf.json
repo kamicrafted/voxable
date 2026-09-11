@@ -14,11 +14,11 @@
     "windows": [
       {
         "label": "flowbar",
-        "windowEffects": { "effects": ["popover"], "state": "active", "radius": 22 },
+        "windowEffects": { "effects": ["popover"], "state": "active", "radius": 18 },
         "url": "flowbar.html",
         "title": "Voxable",
         "width": 289,
-        "height": 44,
+        "height": 36,
         "resizable": false,
         "visible": true,
         "decorations": false,
