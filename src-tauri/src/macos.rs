@@ -118,6 +118,64 @@ pub fn request_microphone_access() {
     }
 }
 
+/// Resize the Flow Bar window about its vertical centre, optionally animated.
+///
+/// Two things `set_size` cannot do. It anchors the top-left, so a height change
+/// makes the pill appear to drop as it grows; and it is instantaneous, which reads
+/// as a snap rather than a transition. AppKit resizes about whatever origin you give
+/// it and will animate the frame itself, so both come from one call.
+///
+/// The left edge is kept because the state icon sits there in both states — the pill
+/// grows out to the right from the dot, leaving the icon where the eye already is.
+///
+/// `ns_window` is the pointer from Tauri's `ns_window()`. Must run on the main
+/// thread; AppKit ignores frame changes from anywhere else.
+pub fn resize_about_center(ns_window: *mut std::ffi::c_void, width: f64, height: f64, animate: bool) {
+    use objc2::rc::Retained;
+    use objc2_app_kit::NSWindow;
+    use objc2_foundation::{NSPoint, NSRect, NSSize};
+
+    if ns_window.is_null() {
+        return;
+    }
+    // Tauri hands out a borrowed pointer; retain it for the duration of the call.
+    let window: Retained<NSWindow> =
+        unsafe { Retained::retain(ns_window as *mut NSWindow) }.expect("ns_window was null");
+
+    let frame = window.frame();
+    if (frame.size.width - width).abs() < 0.5 && (frame.size.height - height).abs() < 0.5 {
+        return;
+    }
+
+    // AppKit's origin is bottom-left, so holding the vertical centre means moving the
+    // origin down by half of whatever height was added.
+    let mut x = frame.origin.x;
+    let y = frame.origin.y - (height - frame.size.height) / 2.0;
+
+    // Growing to the right can run off the display; slide back just enough to fit.
+    if let Some(screen) = window.screen() {
+        let visible = screen.visibleFrame();
+        let max_x = visible.origin.x + visible.size.width - width;
+        if x > max_x {
+            x = max_x.max(visible.origin.x);
+        }
+    }
+
+    let new_frame = NSRect::new(NSPoint::new(x, y), NSSize::new(width, height));
+    // setFrame:display:animate: blocks for the length of the animation, so the
+    // elapsed time here says whether it actually animated or snapped.
+    let t = std::time::Instant::now();
+    unsafe { window.setFrame_display_animate(new_frame, true, animate) };
+    log::info!(
+        "flowbar frame {}x{} -> {}x{} (animate={animate}) took {}ms",
+        frame.size.width,
+        frame.size.height,
+        width,
+        height,
+        t.elapsed().as_millis()
+    );
+}
+
 /// Name of the frontmost application, e.g. `Safari`.
 pub fn frontmost_app() -> Option<String> {
     use objc2_app_kit::NSWorkspace;

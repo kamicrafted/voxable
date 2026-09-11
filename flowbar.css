@@ -68,6 +68,11 @@ body {
   gap: 8px;
   padding: 8px 16px 8px 8px;
   border-radius: 200px;
+  /* The window frame is animated natively; these keep the contents in step with it
+     instead of snapping at the start. Clipped to the capsule so the label cannot
+     spill outside the dot while it collapses. */
+  overflow: hidden;
+  transition: padding 0.2s ease, gap 0.2s ease;
   background-image: linear-gradient(90deg, var(--pill-tint) 0%, var(--pill-tint) 100%),
     linear-gradient(90deg, var(--pill-base) 0%, var(--pill-base) 100%);
 }
@@ -89,6 +94,7 @@ body {
   gap: 8px;
   flex: 1 0 0;
   min-width: 0;
+  transition: opacity 0.16s ease;
 }
 
 /* SF Pro Medium 510, 14px, normal leading. */
@@ -136,7 +142,10 @@ body.collapsed #pill {
 }
 
 body.collapsed #center {
-  display: none !important;
+  flex: 0 0 0;
+  width: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* The ready state has its own icon when collapsed. */

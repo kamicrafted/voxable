@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { playStart, playStop } from "./sounds.js";
 import { IS_MAC, hotkeyParts } from "./hotkeys.js";
 
@@ -10,6 +10,8 @@ const statusEl = document.getElementById("status");
 const metaEl = document.getElementById("meta");
 
 let isRecording = false;
+/// True between asking Rust to start and hearing back — see startRecording.
+let starting = false;
 let busy = false;
 let lastResult = "";
 let timerId = null;
@@ -49,39 +51,13 @@ async function refreshSettings() {
   }
 }
 
-/// Wait for the window server to actually apply a resize.
-///
-/// setSize resolves when the request is sent, not when the window has its new
-/// frame, and the vibrancy mask is built from whatever size the window has when
-/// setEffects runs. Applying the radius too early masks the expanded pill at the
-/// dot's radius — which is what turned the pill back into a rounded rectangle.
-function nextFrames(n = 3) {
-  return new Promise((resolve) => {
-    const step = (left) =>
-      left <= 0 ? resolve() : requestAnimationFrame(() => step(left - 1));
-    step(n);
-  });
-}
-
-let appliedRadius = EXPANDED.radius; // matches tauri.conf.json at startup
-
-async function setPillSize({ w, h, radius }) {
-  const win = getCurrentWindow();
-  await win.setSize(new LogicalSize(w, h));
-  // Only touch the effect if the shape actually changes. With both states on the
-  // same radius this never runs, which is the point.
-  if (radius !== appliedRadius) {
-    await nextFrames();
-    try {
-      await win.setEffects({ effects: ["popover"], state: "active", radius });
-      appliedRadius = radius;
-    } catch (e) {
-      uiLog("error", `could not update the window effect: ${e}`);
-    }
-  }
-  // Growing adds width to the right, so a dot near a display edge would expand
-  // off-screen. Rust clamps it back.
-  await invoke("fit_flowbar", { width: w, height: h }).catch(() => {});
+async function setPillSize({ w, h }, animate = true) {
+  // Rust owns the resize: it holds the vertical centre and animates the frame, which
+  // the JS window API cannot do — setSize anchors the top-left and lands instantly,
+  // so the pill appeared to drop as it grew.
+  await invoke("resize_flowbar", { width: w, height: h, animate }).catch((e) =>
+    uiLog("error", `resize failed: ${e}`)
+  );
 }
 
 async function expand() {
@@ -200,19 +176,35 @@ function rememberResult(text) {
 // --- Dictation pipeline ---
 
 async function startRecording() {
-  if (isRecording || busy) return;
+  // `starting` is set synchronously, before any await. `isRecording` only becomes
+  // true once Rust has confirmed, and the awaits in between are long enough for a
+  // second hotkey press to slip through the guard and hit "Already recording".
+  if (isRecording || busy || starting) return;
+  starting = true;
   cancelCollapse();
-  await expand();
   try {
+    // Capture first, UI second: the microphone should not wait on a window resize,
+    // or the first word is clipped while the pill expands.
     await invoke("start_recording");
     isRecording = true;
     if (settings.sound_enabled !== false) playStart();
     setState("recording", "Listening…", "0.0s");
     startTimer();
+    expand();
   } catch (err) {
-    setState("", `Error: ${err}`, "");
-    console.error(err);
+    // If Rust is recording and we are not, the two have drifted apart; stop so the
+    // next press works instead of failing the same way forever.
+    if (String(err).toLowerCase().includes("already recording")) {
+      uiLog("warn", "recorder state drifted; stopping to resync");
+      await invoke("stop_recording").catch(() => {});
+      showReady();
+    } else {
+      setState("", `Error: ${err}`, "");
+      uiLog("error", `start_recording failed: ${err}`);
+    }
     scheduleCollapse();
+  } finally {
+    starting = false;
   }
 }
 

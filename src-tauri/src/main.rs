@@ -295,6 +295,7 @@ fn main() {
             request_accessibility,
             request_microphone,
             fit_flowbar,
+            resize_flowbar,
             log_from_ui,
             check_for_update,
             open_release_page,
@@ -891,6 +892,39 @@ fn log_from_ui(level: String, message: String) {
         "error" => log::error!("[ui] {message}"),
         "warn" => log::warn!("[ui] {message}"),
         _ => log::info!("[ui] {message}"),
+    }
+}
+
+/// Resize the Flow Bar between its dot and pill sizes.
+///
+/// On macOS this animates and holds the vertical centre, which `set_size` cannot do —
+/// it anchors the top-left, so the pill appeared to drop as it grew. Elsewhere it
+/// falls back to a plain resize plus the on-screen clamp.
+#[tauri::command]
+fn resize_flowbar(app: AppHandle, width: f64, height: f64, animate: bool) -> Result<(), String> {
+    let Some(window) = app.get_webview_window("flowbar") else {
+        return Ok(());
+    };
+
+    #[cfg(target_os = "macos")]
+    {
+        let Ok(ns_window) = window.ns_window() else {
+            return Ok(());
+        };
+        // AppKit ignores frame changes off the main thread.
+        let ptr = ns_window as usize;
+        app.run_on_main_thread(move || {
+            macos::resize_about_center(ptr as *mut std::ffi::c_void, width, height, animate);
+        })
+        .map_err(|e| format!("could not resize the Flow Bar: {e}"))?;
+        return Ok(());
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = animate;
+        let _ = window.set_size(tauri::LogicalSize::new(width, height));
+        fit_flowbar(app, width, height)
     }
 }
 
