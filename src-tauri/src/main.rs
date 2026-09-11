@@ -32,8 +32,8 @@ use voxable_core::screen;
 // The window is larger than the visible pill so its soft shadow isn't clipped.
 // The window *is* the pill: native vibrancy fills the whole window, so there is no
 // transparent padding around it any more (the shadow is the window's own).
-const FLOWBAR_W: f64 = 296.0;
-const FLOWBAR_H: f64 = 60.0;
+const FLOWBAR_W: f64 = 289.0;
+const FLOWBAR_H: f64 = 44.0;
 const FLOWBAR_MARGIN: f64 = 40.0; // gap from the bottom edge
 
 fn main() {

@@ -2,12 +2,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { playStart, playStop } from "./sounds.js";
+import { IS_MAC, hotkeyParts } from "./hotkeys.js";
 
 const pill = document.getElementById("pill");
 const mic = document.getElementById("mic");
 const statusEl = document.getElementById("status");
-const previewEl = document.getElementById("preview");
-const copyBtn = document.getElementById("copy");
+const metaEl = document.getElementById("meta");
 
 let isRecording = false;
 let busy = false;
@@ -25,8 +25,8 @@ let elapsed = 0;
 // circle at 60x60. That means the vibrancy mask never has to be rebuilt on resize —
 // re-applying it was leaving the shape half-masked from the previous size, which
 // showed up as a pill with square ends or a dot with a flat edge.
-const EXPANDED = { w: 296, h: 60, radius: 30 };
-const COLLAPSED = { w: 60, h: 60, radius: 30 };
+const EXPANDED = { w: 289, h: 44, radius: 22 };
+const COLLAPSED = { w: 36, h: 36, radius: 22 };
 const COLLAPSE_AFTER_MS = 1500;
 
 let collapsed = false;
@@ -127,10 +127,9 @@ async function collapse() {
   try {
     collapsed = true;
     document.body.classList.add("collapsed");
-    // Drop any leftover state class: a "done" dot rendered green instead of glass.
-    setState("", "Ready");
-    previewEl.textContent = "";
-    copyBtn.hidden = true;
+    // Drop any leftover state class so the dot shows the ready icon, not the
+    // last state's.
+    showReady();
     await setPillSize(COLLAPSED);
   } catch (e) {
     collapsed = false;
@@ -156,17 +155,33 @@ function scheduleCollapse() {
   }, COLLAPSE_AFTER_MS);
 }
 
-function setState(cls, status) {
+/// Apply one of the design's four states: a class (which selects the icon), the
+/// label, and the meta slot on the right.
+function setState(cls, status, meta) {
   pill.className = cls || "";
   if (status !== undefined) statusEl.textContent = status;
+  if (meta !== undefined) metaEl.textContent = meta;
+}
+
+/// The configured hotkey, written the way macOS writes it, for the ready state's
+/// meta slot. The design shows a literal "⌘+⌥+space"; showing the real binding is
+/// the same idea with the truth in it.
+function hotkeyLabel() {
+  const parts = hotkeyParts(settings.hotkey || "");
+  if (!parts.length) return "";
+  return IS_MAC ? parts.join("") : parts.join("+");
+}
+
+function showReady() {
+  setState("", "Ready", hotkeyLabel());
 }
 
 function startTimer() {
   elapsed = 0;
-  statusEl.textContent = "0.0s";
+  metaEl.textContent = "0.0s";
   timerId = setInterval(() => {
     elapsed += 0.1;
-    statusEl.textContent = `${elapsed.toFixed(1)}s`;
+    metaEl.textContent = `${elapsed.toFixed(1)}s`;
   }, 100);
 }
 
@@ -175,10 +190,11 @@ function stopTimer() {
   timerId = null;
 }
 
-function showPreview(text) {
+/// Keep the result for "Paste last result" in the context menu. The design's
+/// completion state shows a label rather than the transcript, so nothing is
+/// rendered here.
+function rememberResult(text) {
   lastResult = text;
-  previewEl.textContent = text;
-  copyBtn.hidden = false;
 }
 
 // --- Dictation pipeline ---
@@ -191,12 +207,10 @@ async function startRecording() {
     await invoke("start_recording");
     isRecording = true;
     if (settings.sound_enabled !== false) playStart();
-    previewEl.textContent = "";
-    copyBtn.hidden = true;
-    setState("recording");
+    setState("recording", "Listening…", "0.0s");
     startTimer();
   } catch (err) {
-    setState("", `Error: ${err}`);
+    setState("", `Error: ${err}`, "");
     console.error(err);
     scheduleCollapse();
   }
@@ -212,16 +226,16 @@ async function stopRecording() {
   try {
     const { samples } = await invoke("stop_recording");
     if (!samples) {
-      setState("", "No audio");
+      setState("", "No audio", "");
       return;
     }
-    setState("processing", "Transcribing…");
+    setState("processing", "Transcribing", "");
     const raw = await invoke("transcribe");
     if (!raw || raw.trim().length === 0) {
-      setState("", "No speech detected");
+      setState("", "No speech detected", "");
       return;
     }
-    setState("processing", "Cleaning up…");
+    setState("processing", "Transcribing", "");
     const cleaned = await invoke("cleanup");
 
     // Always put the result on the clipboard — that's the core feature.
@@ -248,10 +262,12 @@ async function stopRecording() {
       }
     }
 
-    setState("done", pasted ? "Pasted ✓" : copied ? "Copied ✓" : "Done");
-    showPreview(cleaned);
+    // The design names this state "Copied to clipboard"; every path copies, and
+    // auto-paste is additional rather than instead.
+    setState("done", copied ? "Copied to clipboard" : "Done", "");
+    rememberResult(cleaned);
   } catch (err) {
-    setState("", `Error: ${err}`);
+    setState("", `Error: ${err}`, "");
     console.error(err);
   } finally {
     busy = false;
@@ -309,16 +325,6 @@ mic.addEventListener("mousedown", (e) => {
   window.addEventListener("mouseup", onUp);
 });
 
-copyBtn.addEventListener("click", async () => {
-  if (!lastResult) return;
-  try {
-    await invoke("copy_to_clipboard", { text: lastResult });
-    setState("done", "Copied ✓");
-  } catch (e) {
-    console.error(e);
-  }
-});
-
 // Right-click anywhere on the pill → native context menu (Rust builds it).
 window.addEventListener("contextmenu", (e) => {
   e.preventDefault();
@@ -339,12 +345,15 @@ listen("stop-recording", () => {
 listen("dictation-complete", (e) => {
   if (busy) return; // our own run already handled the UI
   expand();
-  setState("done", "Done ✓");
-  showPreview(e.payload);
+  setState("done", "Copied to clipboard", "");
+  rememberResult(e.payload);
   scheduleCollapse();
 });
 
-listen("settings-changed", refreshSettings);
+listen("settings-changed", async () => {
+  await refreshSettings();
+  if (!isRecording && !busy) showReady();
+});
 
 // The tray asked for the Flow Bar: keep it up so it can be moved, and make sure it
 // is the full pill rather than a dot, since the point is to grab it.
@@ -355,7 +364,7 @@ listen("flowbar-pinned", async () => {
 
 // Start collapsed-after-idle like any other idle moment, and read settings once so
 // the first dictation does not have to wait for them.
-refreshSettings();
+refreshSettings().then(showReady);
 scheduleCollapse();
 
 // --- Position persistence: debounce window moves, save the logical position. ---

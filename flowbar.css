@@ -1,25 +1,35 @@
+/* Flow Bar — built from Figma "Voxable GUI", nodes 18:147 (dark mode) and
+   18:146 (light mode). Every value here comes from the design context, not from
+   measuring the screenshot.
+
+   The frames are named for the glass, not the appearance: the set labelled
+   "light" is the one used in dark mode, and vice versa.
+
+   Both sets use white text, so only the tint and a few opacities change between
+   modes. The blur is the window's native macOS material (windowEffects in
+   tauri.conf.json) — CSS backdrop-filter cannot see past the webview, so it can
+   never blur the desktop. */
+
 :root {
-  --fg: #1a1d24;
-  --muted: #8b93a1;
-  --accent: #4f66f5;
-  --accent-2: #7b5cff;
-  --rec: #ff4d5e;
-  --done: #22c493;
-  /* A tint over the native vibrancy, not a background. The blur comes from the
-     window's macOS material (tauri.conf.json windowEffects) — CSS backdrop-filter
-     cannot see past the webview, so it can never blur the desktop. */
-  --pill-bg: rgba(255, 255, 255, 0.34);
-  --pill-border: rgba(255, 255, 255, 0.45);
+  /* Light mode: Figma 18:146 "dark" — a darker glass, so white text holds up
+     against a bright desktop. */
+  --pill-tint: rgba(0, 9, 174, 0.1);
+  --pill-base: rgba(51, 51, 51, 0.4);
+  --dot-base: rgba(0, 0, 0, 0.4);
+  --meta-opacity: 0.5;
+  --live-opacity: 0.75;
+  --elapsed-opacity: 1;
 }
 
-/* The vibrancy material follows the system appearance, so the pill has to as well —
-   dark text over dark glass is unreadable. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --fg: #f2f4f8;
-    --muted: #9aa3b2;
-    --pill-bg: rgba(255, 255, 255, 0.06);
-    --pill-border: rgba(255, 255, 255, 0.12);
+    /* Dark mode: Figma 18:147 "light" — a lighter glass over a dark desktop. */
+    --pill-tint: rgba(79, 88, 255, 0.2);
+    --pill-base: rgba(204, 204, 204, 0.2);
+    --dot-base: rgba(204, 204, 204, 0.2);
+    --meta-opacity: 0.6;
+    --live-opacity: 0.8;
+    --elapsed-opacity: 0.6;
   }
 }
 
@@ -39,207 +49,110 @@ body {
   height: 100%;
   background: transparent;
   overflow: hidden;
-  font-family: -apple-system, "Segoe UI", Inter, system-ui, sans-serif;
-  color: var(--fg);
+  /* SF Pro on macOS. The design specifies SF Pro Medium at weight 510, which is a
+     variable-font weight, so it is set numerically rather than as `font-weight: 500`. */
+  font-family: -apple-system, "SF Pro Text", "Segoe UI", Inter, system-ui, sans-serif;
+  color: #fff;
   user-select: none;
   cursor: default;
 }
 
-/* The pill IS the window: native vibrancy fills the whole window rect, so any inset
-   here would show as a hard-edged box around the pill. The window carries the shadow
-   ("shadow": true) and the rounded shape (windowEffects radius). */
+/* The pill IS the window: native vibrancy fills the whole window rect, so any
+   inset would show the effect as a hard-edged box around the pill. The window
+   carries the shadow and the rounded shape. */
 #pill {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 12px 0 10px;
-  border-radius: 999px;
-  background: var(--pill-bg);
-  border: 1px solid var(--pill-border);
-  transition: background 0.2s ease, border-color 0.2s ease;
+  gap: 8px;
+  padding: 8px 16px 8px 8px;
+  border-radius: 200px;
+  background-image: linear-gradient(90deg, var(--pill-tint) 0%, var(--pill-tint) 100%),
+    linear-gradient(90deg, var(--pill-base) 0%, var(--pill-base) 100%);
 }
 
-/* --- Collapsed: a glass dot. ---
-   The glass is the visible surface here, same as in the expanded pill, so the mic
-   is a glyph on it rather than an opaque gradient circle covering it. */
+/* The state icon. Each SVG is a 28px circle with its own gradient and glyph, so
+   this element only positions it. */
+#mic {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: center / 28px 28px no-repeat url("/icons/state-ready.svg");
+  cursor: pointer;
+}
+
+#center {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 0 0;
+  min-width: 0;
+}
+
+/* SF Pro Medium 510, 14px, normal leading. */
+#status {
+  flex: 1 0 0;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 510;
+  line-height: normal;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* SF Pro Regular, 12px — the hotkey when ready, elapsed time while recording. */
+#meta {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: normal;
+  white-space: nowrap;
+  opacity: var(--meta-opacity);
+}
+
+/* --- Recording: the label becomes italic live text, meta becomes elapsed. --- */
+#pill.recording #status {
+  font-family: -apple-system, "SF Pro Text", system-ui, sans-serif;
+  font-style: italic;
+  font-weight: 400;
+  opacity: var(--live-opacity);
+}
+
+#pill.recording #meta {
+  opacity: var(--elapsed-opacity);
+}
+
+/* --- Collapsed: a 36px dot. Only the icon shows; its own glass tint is slightly
+       darker than the pill's in light mode. --- */
 body.collapsed #pill {
-  padding: 0;
+  padding: 4px;
   gap: 0;
-  border-radius: 50%;
   justify-content: center;
+  background-image: linear-gradient(90deg, var(--pill-tint) 0%, var(--pill-tint) 100%),
+    linear-gradient(90deg, var(--dot-base) 0%, var(--dot-base) 100%);
 }
 
-body.collapsed #center,
-body.collapsed #copy {
+body.collapsed #center {
   display: none !important;
 }
 
-/* The dot fills its window, so it is its own drag handle and click target. */
+/* The ready state has its own icon when collapsed. */
 body.collapsed #mic {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  background: none;
-  box-shadow: none;
-  color: var(--accent);
+  background-image: url("/icons/state-ready-dot.svg");
 }
 
-/* Outbids #pill.done #mic / #pill.processing #mic, which are more specific than a
-   single-class selector and otherwise paint the dot green or grey. */
-body.collapsed #pill #mic {
-  background: none;
-  box-shadow: none;
-}
-
-body.collapsed #mic:hover {
-  transform: none;
-  background: var(--pill-bg);
-}
-
-body.collapsed #mic svg {
-  width: 17px;
-  height: 17px;
-}
-
-@media (prefers-color-scheme: dark) {
-  body.collapsed #mic {
-    /* The indigo accent goes muddy on dark glass. */
-    color: #b9c2ff;
-  }
-}
-
-/* Mic / stop button */
-#mic {
-  flex: 0 0 auto;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: none;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  box-shadow: 0 2px 8px rgba(79, 102, 245, 0.35);
-  transition: transform 0.12s ease, box-shadow 0.15s ease, background 0.2s ease;
-}
-#mic:hover {
-  transform: scale(1.05);
-}
-#mic:active {
-  transform: scale(0.95);
-}
-#mic svg {
-  width: 19px;
-  height: 19px;
-}
-#mic .ic-stop {
-  display: none;
-}
+/* --- State icons. Set on #mic so one element carries every state. --- */
 #pill.recording #mic {
-  background: linear-gradient(135deg, #ff5e6c, #ff8a5b);
-  box-shadow: 0 0 0 0 rgba(255, 77, 94, 0.5);
-  animation: pulse 1.4s ease-in-out infinite;
+  background-image: url("/icons/state-recording.svg");
 }
-#pill.recording #mic .ic-mic {
-  display: none;
-}
-#pill.recording #mic .ic-stop {
-  display: block;
-}
+
 #pill.processing #mic {
-  background: linear-gradient(135deg, #9aa3b2, #b6bccb);
-  box-shadow: none;
+  background-image: url("/icons/state-transcribing.svg");
 }
+
 #pill.done #mic {
-  background: linear-gradient(135deg, #22c493, #34d3a6);
-  box-shadow: 0 2px 8px rgba(34, 196, 147, 0.35);
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(255, 77, 94, 0.5);
-  }
-  50% {
-    box-shadow: 0 0 0 9px rgba(255, 77, 94, 0);
-  }
-}
-
-/* Center: status text + waveform + preview */
-#center {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 2px;
-}
-#status {
-  font-size: 13.5px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-#preview {
-  font-size: 11.5px;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Waveform: shown only while recording */
-#wave {
-  display: none;
-  align-items: center;
-  gap: 3px;
-  height: 18px;
-}
-#pill.recording #wave {
-  display: flex;
-}
-#wave span {
-  width: 3px;
-  height: 6px;
-  border-radius: 3px;
-  background: linear-gradient(180deg, var(--accent), var(--accent-2));
-  animation: eq 1s ease-in-out infinite;
-}
-#wave span:nth-child(1) { animation-delay: 0s; }
-#wave span:nth-child(2) { animation-delay: 0.15s; }
-#wave span:nth-child(3) { animation-delay: 0.3s; }
-#wave span:nth-child(4) { animation-delay: 0.45s; }
-#wave span:nth-child(5) { animation-delay: 0.6s; }
-
-@keyframes eq {
-  0%, 100% { height: 6px; opacity: 0.6; }
-  50% { height: 18px; opacity: 1; }
-}
-
-/* Copy button */
-#copy {
-  flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
-  border: 1px solid var(--pill-border);
-  background: rgba(20, 24, 40, 0.03);
-  color: var(--muted);
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-#copy svg {
-  width: 15px;
-  height: 15px;
-}
-#copy:hover {
-  background: rgba(79, 102, 245, 0.1);
-  color: var(--accent);
+  background-image: url("/icons/state-copied.svg");
 }
