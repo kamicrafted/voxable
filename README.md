@@ -31,7 +31,7 @@ Every version lives on the [releases page](https://github.com/kamicrafted/voxabl
   launch; Accessibility is what lets it watch the hotkey and paste for you.
 - **Windows** — SmartScreen warns. Click **More info → Run anyway**.
 
-The first dictation downloads a Whisper model (~74 MB for `base`), so it takes a moment longer than
+The first dictation downloads a Whisper model (~148 MB for `base`), so it takes a moment longer than
 the rest.
 
 ---
@@ -140,7 +140,7 @@ npm run tauri build          # CPU; add --features cuda for NVIDIA
 3. Open the Hub (tray icon → **Open Voxable**, or right-click the Flow Bar → **Settings**).
 4. (Optional) Set your LLM endpoint + API key + model for cleanup. With no key, you get raw Whisper text.
 5. Press the hotkey (`fn` on macOS, `Win`+`Alt`+`Space` on Windows), speak, and the text lands in your active field.
-6. The first dictation downloads the Whisper model (~74 MB for `base`) and warms up the GPU, so it is slower than every one after it.
+6. The first dictation downloads the Whisper model (~148 MB for `base`) and warms up the GPU, so it is slower than every one after it.
 
 ## Usage
 
@@ -193,11 +193,11 @@ Dictionary and snippets are best edited in the Hub (they persist to `settings.js
 
 | Name | Size | Notes |
 |------|------|-------|
-| `tiny` | 39 MB | fastest, lowest accuracy |
-| `base` | 74 MB | **default** — good speed/accuracy balance |
-| `small` | 244 MB | better accuracy |
-| `medium` | 769 MB | good accuracy |
-| `large-v3` | 1.5 GB | best accuracy, slowest (GPU recommended) |
+| `tiny` | 78 MB | fastest, lowest accuracy |
+| `base` | 148 MB | **default** — good speed/accuracy balance |
+| `small` | 488 MB | better accuracy |
+| `medium` | 1.5 GB | good accuracy |
+| `large-v3` | 3.1 GB | best accuracy, slowest (GPU recommended) |
 
 Downloaded from HuggingFace (`ggerganov/whisper.cpp`) on first use.
 

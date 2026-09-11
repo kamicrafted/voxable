@@ -108,12 +108,14 @@ pub fn history_audio_dir() -> PathBuf {
 }
 
 pub fn model_info(name: &str) -> (String, String) {
+    // Sizes are the actual ggml f16 files at ggerganov/whisper.cpp (what the URL
+    // downloads), not the smaller quantized variants. base/medium verified on disk.
     let (file, size) = match name {
-        "tiny" => ("ggml-tiny.bin", "39MB"),
-        "base" => ("ggml-base.bin", "74MB"),
-        "small" => ("ggml-small.bin", "244MB"),
-        "medium" => ("ggml-medium.bin", "769MB"),
-        "large-v3" => ("ggml-large-v3.bin", "1.5GB"),
+        "tiny" => ("ggml-tiny.bin", "78MB"),
+        "base" => ("ggml-base.bin", "148MB"),
+        "small" => ("ggml-small.bin", "488MB"),
+        "medium" => ("ggml-medium.bin", "1.5GB"),
+        "large-v3" => ("ggml-large-v3.bin", "3.1GB"),
         other => (other, "?"),
     };
     (file.to_string(), size.to_string())
