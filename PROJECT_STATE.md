@@ -15,6 +15,17 @@
 
 **▶ RESUME HERE:** **Finish the macOS QA checklist.** Permissions, transparency and positioning are done and verified on the machine (2026-09-10): mic + Accessibility grant once and stick across rebuilds, the Flow Bar renders transparent, and dictation → cleanup → auto-paste works end to end (`Pasted ✓`, 110–266ms). Remaining: (1) the runtime checklist below — drag/persist **across displays with different scale factors**, context menu, tray menu, Hub tabs, settings-preserve-dictionary, history playback; (2) port the onboarding screen to Windows (it reports every permission as granted there); (3) deferred: wire `mic_device` to cpal device selection. **Streaming decode was scoped and dropped** — measured 30–48x realtime, so it would have saved ~100ms; the slow feeling was the first dictation paying model load + Metal warmup. Timing logs are in `whisper.rs` if it needs re-measuring.
 
+**Shipped v0.5.0 (2026-09-11, macOS only):** Flow Bar rebuilt from Figma (nodes 18:146/18:147) —
+289x36 pill and 36x36 dot sharing one height and one left padding so the icon never moves, native
+vibrancy per appearance, four states (ready / recording / transcribing / copied) driven by real
+exported SVGs, and a 220ms animator-proxy resize about the vertical centre. **Accuracy:** the
+dictionary now primes Whisper's decoder (`set_initial_prompt`) with written forms *and* snippet
+triggers, and separately corrects the transcript literally, so both work with no LLM key. **Updates:**
+checks GitHub releases on launch and from the tray, announcing a version once. **Also:** a
+hide-when-idle setting, the Hub's switches no longer squeeze, history playback works again
+(`ensureCtx` was removed with the sounds extraction), and the webview reports uncaught errors to the
+app log. Known: ⌃⌥Space cannot be bound — macOS symbolic hotkey 61 owns it.
+
 **Shipped v0.4.0 (2026-09-10, macOS only):** Flow Bar reworked and two accuracy bugs fixed.
 The window now *is* the pill (296x60) with native macOS vibrancy, a light/dark palette, and a
 native shadow; it collapses to a 60x60 glass mic dot after 1.5s idle and expands on the hotkey or a

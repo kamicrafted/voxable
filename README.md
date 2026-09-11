@@ -18,7 +18,7 @@ Press a hotkey, speak, and polished text is typed straight into whatever field y
 
 | Platform | Download | Notes |
 |---|---|---|
-| **macOS** (Apple Silicon) | [**Voxable_0.4.0_aarch64.dmg**](https://github.com/kamicrafted/voxable/releases/download/v0.4.0/Voxable_0.4.0_aarch64.dmg) | Metal-accelerated. macOS 11+. Apple Silicon only — no Intel build. |
+| **macOS** (Apple Silicon) | [**Voxable_0.5.0_aarch64.dmg**](https://github.com/kamicrafted/voxable/releases/download/v0.5.0/Voxable_0.5.0_aarch64.dmg) | Metal-accelerated. macOS 11+. Apple Silicon only — no Intel build. |
 | **Windows** (any x64) | [**Voxable_0.2.0_x64_cpu-setup.exe**](https://github.com/kamicrafted/voxable/releases/download/v0.2.0/Voxable_0.2.0_x64_cpu-setup.exe) · [`.msi`](https://github.com/kamicrafted/voxable/releases/download/v0.2.0/Voxable_0.2.0_x64_cpu_en-US.msi) | ~3 MB. Runs anywhere, no GPU needed. **Start here.** |
 | **Windows** (NVIDIA GPU) | [**Voxable_0.2.0_x64_cuda-setup.exe**](https://github.com/kamicrafted/voxable/releases/download/v0.2.0/Voxable_0.2.0_x64_cuda-setup.exe) | ~380 MB. Faster transcription and `large-v3`. Bundles the CUDA runtime — no toolkit needed, works on RTX 20xx–50xx. |
 
@@ -55,8 +55,9 @@ the rest.
 - **Tap or hold** — tap the hotkey for hands-free dictation, or hold it for push-to-talk that ends when you let go. No mode to set (macOS).
 - **`fn` as the hotkey on macOS** — the Globe key does nothing useful by default, and it needs no chord. Any combination works too; the recorder captures a real keypress and checks the OS will allow it.
 - **4-level cleanup** — none / light / medium / high, or your own custom prompt.
-- **Dictionary** — word corrections injected into the LLM prompt.
-- **Snippets** — whole-word, case-insensitive trigger → expansion.
+- **Dictionary that actually teaches Whisper** — your names and terms are fed to the decoder so it spells them right in the first place, and anything it still gets wrong is corrected in the transcript. No LLM key needed.
+- **Checks for updates** on launch and from the menu bar, and tells you what changed.
+- **Snippets** — whole-word, case-insensitive trigger → expansion. Triggers are taught to Whisper too, so an unusual phrase is transcribed as written and actually matches.
 - **History with audio** — every dictation stored with its recording (14-day retention, playback in the Hub).
 - **Local & private** — audio and transcripts never leave your machine (unless you point cleanup at a remote LLM).
 - **GPU optional** — CPU works everywhere; CUDA (NVIDIA) / Metal (Apple Silicon) for faster transcription.
