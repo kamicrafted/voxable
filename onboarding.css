@@ -19,6 +19,20 @@
   display: none !important;
 }
 
+/* Platform-specific content. An inline <head> script stamps data-os on <html>
+   before first paint; exactly one branch hides. !important so it wins over the
+   layout rules (e.g. .ob-steps { display: flex }) regardless of source order. */
+[data-os="win"] .mac-only {
+  display: none !important;
+}
+[data-os="mac"] .win-only {
+  display: none !important;
+}
+/* Fallback if the script never runs: show the macOS (original) content only. */
+:root:not([data-os]) .win-only {
+  display: none !important;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;

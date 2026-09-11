@@ -4,6 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Welcome to Voxable</title>
+    <script>
+      // Set the platform on <html> before first paint so the correct onboarding
+      // variant renders with no flash of the other OS's content. (CSP is null.)
+      document.documentElement.dataset.os =
+        navigator.platform.toLowerCase().includes("mac") ? "mac" : "win";
+    </script>
     <link rel="stylesheet" href="/onboarding.css" />
   </head>
   <body>
@@ -11,13 +17,17 @@
       <header class="ob-header">
         <div class="ob-mark">🎙️</div>
         <h1>Welcome to Voxable</h1>
-        <p class="ob-sub">
+        <p class="ob-sub mac-only">
           Two permissions and you're set. Voxable transcribes on your machine — audio
           never leaves it.
         </p>
+        <p class="ob-sub win-only">
+          Voxable transcribes on your machine — audio never leaves it. Here's how it works.
+        </p>
       </header>
 
-      <ol class="ob-steps">
+      <!-- macOS: permission grants (Microphone + Accessibility) -->
+      <ol class="ob-steps mac-only">
         <li class="ob-step" data-step="microphone">
           <div class="ob-step-icon">🎤</div>
           <div class="ob-step-body">
@@ -61,7 +71,7 @@
         </li>
       </ol>
 
-      <section class="ob-globe" id="globe-tip" hidden>
+      <section class="ob-globe mac-only" id="globe-tip" hidden>
         <div class="ob-globe-key">fn</div>
         <div>
           <div class="ob-globe-title">One more thing about the fn key</div>
@@ -76,13 +86,51 @@
         </div>
       </section>
 
+      <!-- Windows: no OS permission grants needed — just how to use it -->
+      <ol class="ob-steps win-only">
+        <li class="ob-step">
+          <div class="ob-step-icon">⌨️</div>
+          <div class="ob-step-body">
+            <div class="ob-step-title">How to dictate</div>
+            <p class="ob-step-why">
+              Press <kbd>Win</kbd> + <kbd>Alt</kbd> + <kbd>Space</kbd> to start, and again
+              to stop — or hold it to talk and release when you're done. Your words are
+              typed straight into whatever field you're in.
+            </p>
+          </div>
+        </li>
+
+        <li class="ob-step">
+          <div class="ob-step-icon">🎙️</div>
+          <div class="ob-step-body">
+            <div class="ob-step-title">The Flow Bar</div>
+            <p class="ob-step-why">
+              A small bar floats at the bottom of your screen and never steals focus. Click
+              its mic to dictate, right-click it for options, or drag it anywhere.
+            </p>
+          </div>
+        </li>
+
+        <li class="ob-step">
+          <div class="ob-step-icon">🎤</div>
+          <div class="ob-step-body">
+            <div class="ob-step-title">Microphone</div>
+            <p class="ob-step-why">
+              Voxable uses your microphone locally. Windows allows this for desktop apps by
+              default; if it's ever blocked, turn it on in <strong>Settings → Privacy &amp;
+              security → Microphone → Let desktop apps access your microphone</strong>.
+            </p>
+          </div>
+        </li>
+      </ol>
+
       <div class="ob-allset" id="allset" hidden>
         <span class="ob-allset-mark">✓</span>
         <span>You're all set — starting Voxable…</span>
       </div>
 
       <footer class="ob-footer">
-        <button class="ob-btn ob-btn--quiet" data-action="skip">Skip for now</button>
+        <button class="ob-btn ob-btn--quiet mac-only" data-action="skip">Skip for now</button>
         <button class="ob-btn ob-btn--primary" data-action="done">Start using Voxable</button>
       </footer>
     </div>

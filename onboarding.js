@@ -1,18 +1,20 @@
-// First-launch permission screen.
+// First-launch screen.
 //
-// macOS: permissions can be granted outside this window (System Settings), and
-// macOS sends no notification when they change, so the screen polls while it is
-// open and auto-dismisses once both are granted.
+// macOS: shows Microphone + Accessibility permission grants. They can be granted
+// outside this window (System Settings), and macOS sends no notification when
+// they change, so the screen polls while open and auto-dismisses once both are
+// granted.
 //
-// Windows: there are no OS-level permission prompts — microphone access is
-// granted by the first `cpal` stream open, and auto-paste needs no extra grant.
-// The screen still shows so the user can set a hotkey and see what the app
-// does, but it does NOT auto-dismiss: the user clicks "Start using Voxable"
-// when ready. Polling is skipped since there is nothing to wait for.
+// Windows: a desktop app needs no OS permission grants (mic is allowed for
+// desktop apps by default, auto-paste needs nothing), and there is no
+// Accessibility concept or `fn` key. So the permission machinery below does not
+// run at all — Windows gets a static "how to use it" variant of the markup
+// (gated by data-os in the HTML/CSS) and dismisses on the button click.
 
 import { invoke } from "@tauri-apps/api/core";
 
-const IS_MACOS = navigator.platform.toLowerCase().includes("mac");
+// The platform was stamped on <html> by an inline head script before paint.
+const IS_MACOS = document.documentElement.dataset.os === "mac";
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
@@ -93,12 +95,15 @@ $$("[data-action]").forEach((btn) => {
     } catch (e) {
       console.error(`${btn.dataset.action} failed:`, e);
     }
-    refresh();
+    if (IS_MACOS) refresh();
   });
 });
 
-refresh();
+// macOS only: poll for permission changes and paint status. On Windows there is
+// nothing to grant or poll — the static how-to variant is shown and the screen
+// just waits for the "Start using Voxable" click.
 if (IS_MACOS) {
+  refresh();
   setInterval(refresh, 1500);
+  window.addEventListener("focus", refresh);
 }
-window.addEventListener("focus", refresh);
