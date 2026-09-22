@@ -125,8 +125,12 @@ Developer ID and does nothing for Gatekeeper on anyone else's machine.
 
 - **Deployment target.** ggml uses `std::filesystem`, which libc++ marks unavailable
   before macOS 10.15, and the `cc` crate defaults Apple builds to 10.13 →
-  `'path' is unavailable: introduced in macOS 10.15`. `.cargo/config.toml` pins
-  `MACOSX_DEPLOYMENT_TARGET = "11.0"`. Setting it as a shell variable is not reliable:
+  `'path' is unavailable: introduced in macOS 10.15`. Two settings pin it to 11.0:
+  `bundle.macOS.minimumSystemVersion` in `tauri.conf.json`, and
+  `MACOSX_DEPLOYMENT_TARGET = "11.0"` in `.cargo/config.toml`. The Tauri one is the
+  one that matters for `npm run tauri build`: the Tauri CLI exports
+  `MACOSX_DEPLOYMENT_TARGET` from `minimumSystemVersion` (default `10.13`), and an
+  exported variable overrides a cargo `[env]` entry. Setting it as a shell variable is not reliable:
   it does not survive `npm run tauri build`, and CMake caches the old value in
   `target/release/build/whisper-rs-sys-*/out/build/CMakeCache.txt` — delete that
   directory if you ever see the 10.15 error again.

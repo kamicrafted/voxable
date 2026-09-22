@@ -67,6 +67,9 @@
     ],
     "category": "Productivity",
     "shortDescription": "Local voice dictation with AI cleanup",
-    "longDescription": "Voxable turns your speech into polished text using local Whisper transcription and a pluggable LLM cleanup pass. No subscription, no cloud required."
+    "longDescription": "Voxable turns your speech into polished text using local Whisper transcription and a pluggable LLM cleanup pass. No subscription, no cloud required.",
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    }
   }
 }
