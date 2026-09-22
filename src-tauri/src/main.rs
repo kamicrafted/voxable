@@ -317,12 +317,23 @@ fn main() {
         ])
         .build(context)
         .expect("error while building tauri application")
-        .run(|_app, _event| {
+        .run(|app, event| {
             // macOS: both windows hide rather than close, so clicking the Dock icon has
             // nothing to restore unless we do it here.
             #[cfg(target_os = "macos")]
-            if matches!(_event, tauri::RunEvent::Reopen { .. }) {
-                show_hub(_app);
+            if matches!(event, tauri::RunEvent::Reopen { .. }) {
+                show_hub(app);
+            }
+
+            // Free the model before exit() runs ggml's static destructors, which abort
+            // on Metal if its buffers are still allocated. The timeout keeps a quit
+            // during a transcription from hanging.
+            if matches!(event, tauri::RunEvent::Exit) {
+                let state = app.state::<AppState>();
+                match state.whisper.try_lock_for(std::time::Duration::from_secs(2)) {
+                    Some(mut engine) => engine.unload(),
+                    None => log::warn!("exit: transcription still running, model not freed"),
+                };
             }
         });
 }
