@@ -255,7 +255,8 @@ function populateSettings(s) {
   $("#custom-prompt").value = s.custom_prompt || "";
 }
 
-$("#save-settings").addEventListener("click", async () => {
+$("#save-settings").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
   // Spread the full current settings, override only the form fields — this is
   // what keeps dictionary / snippets / flowbar_position from being wiped.
   const merged = {
@@ -272,6 +273,10 @@ $("#save-settings").addEventListener("click", async () => {
     flowbar_hide_when_idle: $("#flowbar-hide-when-idle").checked,
     custom_prompt: $("#custom-prompt").value.trim(),
   };
+  // The status line lives on the Dictation tab, out of sight here, so the
+  // button itself confirms the save.
+  btn.disabled = true;
+  btn.textContent = "Saving…";
   try {
     await invoke("save_settings", { settings: merged });
     // Re-register the hotkey in case it changed.
@@ -283,9 +288,16 @@ $("#save-settings").addEventListener("click", async () => {
     currentSettings = merged;
     setStatus("done", "Settings saved");
     refreshModelStatus();
+    btn.textContent = "Saved ✓";
   } catch (err) {
+    btn.textContent = "Save failed";
+    uiLog("error", `save_settings: ${err}`);
     alert(`Failed to save settings: ${err}`);
   }
+  setTimeout(() => {
+    btn.textContent = "Save settings";
+    btn.disabled = false;
+  }, 1500);
 });
 
 
