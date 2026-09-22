@@ -143,6 +143,14 @@ impl WhisperEngine {
         Ok(())
     }
 
+    /// Free the loaded model. Call before the process exits: ggml's Metal device is
+    /// a C++ static whose destructor runs inside `exit()` and aborts if any of the
+    /// model's buffers are still allocated (macOS 15+, where it uses residency sets).
+    pub fn unload(&mut self) {
+        self.ctx = None;
+        self.model_name = None;
+    }
+
     /// Transcribe raw f32 PCM audio (16kHz mono) to text.
     /// `language` is a BCP-47 code ("en", "es", etc.) or "auto" for detection.
     /// `vocabulary` primes the decoder (see `prompt::build_whisper_vocabulary`);
