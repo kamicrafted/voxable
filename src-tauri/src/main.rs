@@ -24,7 +24,7 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use voxable_core::history::HistoryEntry;
 use whisper::AppState;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use voxable_core::hotkey;
 use voxable_core::screen;
 
@@ -591,13 +591,59 @@ fn register_hotkey(app: &AppHandle, hotkey: &str) -> Result<(), String> {
     let shortcut =
         Shortcut::from_str(hotkey).map_err(|e| format!("Invalid hotkey '{}': {}", hotkey, e))?;
     let handle = app.clone();
-    gs.on_shortcut(shortcut, move |_app, _sc, event| {
-        if event.state != ShortcutState::Pressed {
-            return;
+    // One key, both modes — the same behavior the macOS Fn path has: a quick tap
+    // toggles hands-free dictation; holding the key past HOLD_THRESHOLD_MS is
+    // push-to-talk (walkie-talkie) and ends the moment you let go. global-hotkey 0.8
+    // reports `Released` on Windows too (it polls the key after the press), so this
+    // now works there — previously the release was ignored and Windows was toggle-only.
+    let holding = Arc::new(AtomicBool::new(false));
+    let holding_r = Arc::clone(&holding);
+    let press_started = Arc::new(AtomicBool::new(false));
+    let press_started_r = Arc::clone(&press_started);
+    let press_at_ms = Arc::new(AtomicU64::new(0));
+    let press_at_ms_r = Arc::clone(&press_at_ms);
+    gs.on_shortcut(shortcut, move |_app, _sc, event| match event.state {
+        ShortcutState::Pressed => {
+            // A held hotkey repeats WM_HOTKEY on Windows; collapse repeats while held
+            // so a hold doesn't toggle over and over.
+            if holding.swap(true, Ordering::SeqCst) {
+                return;
+            }
+            let was_recording = handle
+                .try_state::<Recorder>()
+                .map(|r| r.is_recording())
+                .unwrap_or(false);
+            // Record whether THIS press started dictation, so its own release can't
+            // stop a dictation the press had actually ended (toggle-off).
+            press_started.store(!was_recording, Ordering::SeqCst);
+            press_at_ms.store(now_ms(), Ordering::SeqCst);
+            trigger_dictation(&handle);
         }
-        trigger_dictation(&handle);
+        ShortcutState::Released => {
+            // global-hotkey can spawn one release-poll per WM_HOTKEY repeat, so several
+            // Released events can arrive — act on the first, ignore the rest.
+            if !holding_r.swap(false, Ordering::SeqCst) {
+                return;
+            }
+            let started = press_started_r.load(Ordering::SeqCst);
+            let held_ms = now_ms().saturating_sub(press_at_ms_r.load(Ordering::SeqCst));
+            if hotkey::release_action(started, held_ms) == hotkey::ReleaseAction::Stop {
+                log::info!("hotkey held {held_ms}ms — push-to-talk, stopping on release");
+                // The Flow Bar's own guard ignores this if it isn't recording or is
+                // already transcribing.
+                let _ = handle.emit_to("flowbar", "stop-recording", ());
+            }
+        }
     })
     .map_err(|e| format!("Failed to register hotkey '{}': {}", hotkey, e))
+}
+
+/// Milliseconds since the Unix epoch — for measuring how long a hotkey was held.
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 /// Toggle dictation from a hotkey, whatever kind of hotkey it was.

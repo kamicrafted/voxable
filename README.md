@@ -50,7 +50,7 @@ the rest.
 - **A Flow Bar that gets out of the way** — frosted glass that matches your light or dark appearance, shrinking to a mic dot after a moment idle and expanding when you dictate. The dot stays draggable, so it never has to reappear before you can move it (macOS).
 - **Audible start and stop** — two ascending notes when recording begins, one lower note when it ends, so you are never unsure whether it heard you.
 - **Focus-preserving auto-paste** — the Flow Bar never takes focus, so text lands in your active app (macOS and Windows).
-- **Tap or hold** — tap the hotkey for hands-free dictation, or hold it for push-to-talk that ends when you let go. No mode to set (macOS).
+- **Tap or hold** — tap the hotkey for hands-free dictation, or hold it for push-to-talk that ends when you let go. No mode to set (macOS and Windows).
 - **`fn` as the hotkey on macOS** — the Globe key does nothing useful by default, and it needs no chord. Any combination works too; the recorder captures a real keypress and checks the OS will allow it.
 - **4-level cleanup** — none / light / medium / high, or your own custom prompt.
 - **Dictionary that actually teaches Whisper** — your names and terms are fed to the decoder so it spells them right in the first place, and anything it still gets wrong is corrected in the transcript. No LLM key needed.
@@ -221,7 +221,7 @@ Frontend is vanilla JS + Vite (multi-page: `index.html` = Hub, `flowbar.html` = 
 - **LLM is optional** — no key = raw Whisper text (still useful).
 - **GPU is optional** — CPU is fine; GPU is ~5–10× faster for transcription. CUDA builds are not portable unless built with the shareable script; Metal builds run on macOS only.
 - **Auto-paste** works on macOS and Windows; Linux would need an equivalent.
-- **Push-to-talk is macOS-only.** It needs the key release, which the macOS event tap reports and a registered global shortcut does not. Windows taps to toggle.
+- **Push-to-talk works on macOS and Windows.** Hold the hotkey to talk and release to stop; a quick tap toggles hands-free instead. (On Windows the release is detected by the global-shortcut layer polling the key after the press; on macOS the `fn` event tap reports it directly.)
 - **Not code-signed** — expect SmartScreen (Windows) / Gatekeeper (macOS) on first launch.
 
 Dev/build details: [BUILD.md](BUILD.md) · Project state: [PROJECT_STATE.md](PROJECT_STATE.md)
